@@ -1,0 +1,6 @@
+out/
+**/build/
+**/.gradle/
+**/.idea/
+**/local.properties
+local-artifacts/
