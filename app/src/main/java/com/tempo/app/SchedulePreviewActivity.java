@@ -18,6 +18,7 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
+import android.widget.Toast;
 import android.text.InputType;
 
 import androidx.appcompat.app.AppCompatActivity;
@@ -26,6 +27,7 @@ import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
+import com.tempo.app.scheduler.AutoScheduler;
 import com.tempo.app.scheduler.ScheduleDisplayBlocks;
 import com.tempo.app.scheduler.ScheduleGenerator;
 
@@ -578,7 +580,15 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                     RepositoryProvider.getTaskRepository().updateTask(updated, new TaskRepository.Callback<Integer>() {
                         @Override public void onSuccess(Integer rows) {
                             if (rows == null || rows == 0) { showEditError("任务未找到，未保存"); return; }
-                            dialog.dismiss(); loadData();
+                            dialog.dismiss();
+                            AutoScheduler.regenerateToday(new AutoScheduler.Listener() {
+                                @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) loadData(); }
+                                @Override public void onFailed(String error) {
+                                    if (isFinishing()) return;
+                                    Toast.makeText(SchedulePreviewActivity.this, error, Toast.LENGTH_LONG).show();
+                                    loadData();
+                                }
+                            });
                         }
                         @Override public void onError(Exception error) { showEditError("保存失败：" + error.getMessage()); }
                     });

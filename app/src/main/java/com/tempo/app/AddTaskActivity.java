@@ -20,6 +20,8 @@ import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
+import com.tempo.app.scheduler.AutoScheduler;
+import com.tempo.app.scheduler.ScheduleGenerator;
 
 import java.text.SimpleDateFormat;
 import java.text.ParseException;
@@ -43,6 +45,7 @@ public class AddTaskActivity extends AppCompatActivity {
     private LinearLayout categoryRow, difficultyRow, importanceRow;
     private String category = "Study";
     private int difficulty = 3, importance = 3;
+    private String scheduleNote;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
@@ -239,7 +242,12 @@ public class AddTaskActivity extends AppCompatActivity {
             RepositoryProvider.getTaskRepository().updateTask(task, new TaskRepository.Callback<Integer>() {
                 @Override public void onSuccess(Integer rows) {
                     if (rows == null || rows == 0) { message("任务未找到"); resetSave(); return; }
-                    setResult(RESULT_OK); finish();
+                    setResult(RESULT_OK);
+                    save.setText("正在更新排程…");
+                    AutoScheduler.regenerateToday(new AutoScheduler.Listener() {
+                        @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) finish(); }
+                        @Override public void onFailed(String error) { message(error); if (!isFinishing()) finish(); }
+                    });
                 }
                 @Override public void onError(Exception error) { message("保存失败：" + error.getMessage()); resetSave(); }
             });
@@ -248,7 +256,8 @@ public class AddTaskActivity extends AppCompatActivity {
                 @Override public void onSuccess(Long id) {
                     if (id == null || id <= 0 || id > Integer.MAX_VALUE) { message("任务保存失败"); resetSave(); return; }
                     setResult(RESULT_OK);
-                    showRecommendation((int) (long) id, task.getTitle());
+                    save.setText("正在排程…");
+                    scheduleAndShow((int) (long) id, task.getTitle());
                 }
                 @Override public void onError(Exception error) { message("保存失败：" + error.getMessage()); resetSave(); }
             });
@@ -258,6 +267,23 @@ public class AddTaskActivity extends AppCompatActivity {
     private void resetSave() {
         save.setEnabled(true);
         save.setText(editingTaskId > 0 ? "保存任务信息" : "保存并查看推荐");
+    }
+
+    /** 保存后触发 C 的排程服务（今天），写入 schedule_items 后再读取推荐时段。 */
+    private void scheduleAndShow(int taskId, String taskTitle) {
+        AutoScheduler.regenerateToday(new AutoScheduler.Listener() {
+            @Override public void onScheduled(ScheduleGenerator.Result result) {
+                if (isFinishing() || isDestroyed()) return;
+                int left = AutoScheduler.remainingMinutes(result, taskId);
+                scheduleNote = left > 0 ? "今天剩余时间不够，还有 " + left + " 分钟没排进去。" : null;
+                showRecommendation(taskId, taskTitle);
+            }
+            @Override public void onFailed(String error) {
+                if (isFinishing() || isDestroyed()) return;
+                scheduleNote = error;
+                showRecommendation(taskId, taskTitle);
+            }
+        });
     }
 
     private void showRecommendation(int taskId, String taskTitle) {
@@ -302,7 +328,8 @@ public class AddTaskActivity extends AppCompatActivity {
         if (rows == null || rows.isEmpty()) {
             card.addView(text("等待推荐时间", 20, INK, true));
             space(card, 10);
-            card.addView(text("排程生成后，这里会显示建议时段。返回日程后可查看已安排的任务。", 14, MUTED, false));
+            card.addView(text(scheduleNote != null ? scheduleNote
+                    : "排程生成后，这里会显示建议时段。返回日程后可查看已安排的任务。", 14, MUTED, false));
         } else {
             card.addView(text("建议时段", 20, INK, true));
             space(card, 12);
@@ -313,6 +340,10 @@ public class AddTaskActivity extends AppCompatActivity {
                         + timeFormat.format(new Date(item.getEndTime())), 15, INK, true));
                 space(card, 10);
             }
+            if (scheduleNote != null) {
+                card.addView(text(scheduleNote, 13, MUTED, false));
+                space(card, 6);
+            }
             card.addView(text("返回日程，点击任务即可调整时段。", 13, MUTED, false));
         }
         body.addView(card);
@@ -322,7 +353,7 @@ public class AddTaskActivity extends AppCompatActivity {
         if (rows == null || rows.isEmpty()) {
             TextView retry = text("刷新推荐", 14, Color.rgb(52, 126, 91), true);
             retry.setGravity(Gravity.CENTER);
-            retry.setOnClickListener(v -> showRecommendation(task.getTaskId(), task.getTitle()));
+            retry.setOnClickListener(v -> scheduleAndShow(task.getTaskId(), task.getTitle()));
             footer.addView(retry, new LinearLayout.LayoutParams(-1, dp(42)));
         }
         TextView done = text("返回日程", 16, INK, true);

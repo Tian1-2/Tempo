@@ -14,8 +14,10 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 /** Reads the repositories, schedules one day, and saves generated rows. Call off the UI thread. */
 public final class ScheduleService {
@@ -53,13 +55,22 @@ public final class ScheduleService {
                 blocked.add(new Interval(item.getStartTime(), item.getEndTime()));
             }
         }
+        List<ScheduleGenerator.Task> tasks =
+                ScheduleModelAdapter.pendingTasks(RepositoryProvider.getTaskRepository().getPendingTasksSync());
+        Set<Long> pendingIds = new HashSet<>();
+        for (ScheduleGenerator.Task task : tasks) pendingIds.add(task.id);
+        List<ScheduleGenerator.Session> locked = new ArrayList<>();
+        for (ScheduleGenerator.Session session : ScheduleModelAdapter.lockedSessions(existing)) {
+            // A locked slot whose task is no longer pending (e.g. completed) still occupies time but is not re-planned.
+            if (pendingIds.contains(session.taskId)) locked.add(session);
+            else blocked.add(session.interval);
+        }
         long now = System.currentTimeMillis();
         long earliest = Math.max(day.start, Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE);
         if (day.start > now) earliest = day.start;
         ScheduleGenerator.Request request = new ScheduleGenerator.Request(day, earliest,
-                ScheduleModelAdapter.pendingTasks(RepositoryProvider.getTaskRepository().getPendingTasksSync()),
-                Collections.singletonList(new Interval(wake, sleep)), blocked,
-                ScheduleModelAdapter.lockedSessions(existing), constraints.productiveWindows,
+                tasks, Collections.singletonList(new Interval(wake, sleep)), blocked,
+                locked, constraints.productiveWindows,
                 profile.getFocusDuration(), profile.getBreakDuration(), profile.getDailyCapacity());
         ScheduleGenerator.Result result = new ScheduleGenerator().generate(request);
         schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result));
