@@ -3,6 +3,7 @@ package com.tempo.app;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Color;
+import android.graphics.Paint;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -10,6 +11,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -17,6 +19,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.tempo.app.home.DailyReview;
+import com.tempo.app.home.RingView;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.model.TaskFeedback;
@@ -47,6 +50,9 @@ public class HomeActivity extends AppCompatActivity {
     private static final int MINT_SOFT = Color.rgb(232, 245, 238);
     private static final int GREEN = Color.rgb(52, 126, 91);
     private static final int BORDER = Color.rgb(226, 232, 227);
+    private static final int WARM = Color.rgb(178, 107, 31);
+    private static final int WARM_SOFT = Color.rgb(255, 246, 234);
+    private static final int HERO_MUTED = Color.rgb(170, 186, 184);
     private static final int MORNING_START_HOUR = 7;
     private static final int MORNING_END_HOUR = 9;
     private static final String PREFS = "tempo_home";
@@ -171,88 +177,108 @@ public class HomeActivity extends AppCompatActivity {
 
     private void render() {
         page.removeAllViews();
+        FrameLayout root = new FrameLayout(this);
         ScrollView scroll = new ScrollView(this);
+        scroll.setVerticalScrollBarEnabled(false);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(24), dp(28), dp(24), dp(24));
+        body.setPadding(dp(22), dp(30), dp(22), dp(showingReview ? 28 : 110));
         scroll.addView(body);
-        page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
+        root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        page.addView(root, new LinearLayout.LayoutParams(-1, -1));
         if (showingReview) renderReview(body);
         else {
             renderOverview(body);
-            page.addView(bottomBar());
+            FrameLayout.LayoutParams barParams = new FrameLayout.LayoutParams(-1, dp(66), Gravity.BOTTOM);
+            barParams.setMargins(dp(18), 0, dp(18), dp(18));
+            root.addView(bottomBar(), barParams);
         }
     }
 
     private void renderReview(LinearLayout body) {
-        body.addView(text(greeting(System.currentTimeMillis()), 30, INK, true));
-        space(body, 6);
-        body.addView(text(longDate(System.currentTimeMillis()), 15, MUTED, false));
-        space(body, 28);
+        long now = System.currentTimeMillis();
+        body.addView(text(longDate(now), 14, MUTED, false));
+        space(body, 2);
+        body.addView(text(greeting(now) + " ☀", 32, INK, true));
+        space(body, 22);
         DailyReview r = snapshot.yesterday;
         if (r == null || r.isEmpty()) {
-            LinearLayout card = card(Color.WHITE);
-            card.addView(text("A brand new day. You've got this!", 18, INK, true));
+            LinearLayout card = card(Color.WHITE, true);
+            card.setGravity(Gravity.CENTER_HORIZONTAL);
+            card.setPadding(dp(20), dp(28), dp(20), dp(28));
+            TextView title = text("A brand new day. You've got this!", 19, INK, true);
+            title.setGravity(Gravity.CENTER);
+            card.addView(title);
             space(card, 8);
-            card.addView(text("Nothing was tracked yesterday. Add a task and let Tempo plan it for you.", 14, MUTED, false));
+            TextView hint = text("Nothing was tracked yesterday. Add a task and Tempo will fit it into your day.", 14, MUTED, false);
+            hint.setGravity(Gravity.CENTER);
+            card.addView(hint);
             body.addView(card);
         } else {
-            body.addView(text("YESTERDAY", 12, GREEN, true));
-            space(body, 10);
-            LinearLayout card = card(Color.WHITE);
-            card.addView(text(r.encouragement(), 18, INK, true));
-            space(card, 14);
-            LinearLayout stats = new LinearLayout(this);
-            stats.addView(stat("Tasks done", r.completedTasks + " / " + r.plannedTasks), new LinearLayout.LayoutParams(0, -2, 1));
-            stats.addView(stat("Focused", DailyReview.formatMinutes(r.focusMinutes)), new LinearLayout.LayoutParams(0, -2, 1));
-            card.addView(stats);
+            LinearLayout card = card(Color.WHITE, true);
+            card.setGravity(Gravity.CENTER_HORIZONTAL);
+            card.setPadding(dp(18), dp(24), dp(18), dp(22));
+            card.addView(eyebrow(r.score != null ? "YESTERDAY'S SCORE" : "YESTERDAY", GREEN));
             if (r.score != null) {
-                space(card, 16);
-                rule(card);
-                space(card, 16);
-                LinearLayout scoreRow = new LinearLayout(this);
-                scoreRow.setGravity(Gravity.CENTER_VERTICAL);
-                TextView score = text(String.valueOf(r.score), 40, GREEN, true);
-                scoreRow.addView(score);
-                LinearLayout scoreText = new LinearLayout(this);
-                scoreText.setOrientation(LinearLayout.VERTICAL);
-                scoreText.setPadding(dp(14), 0, 0, 0);
-                scoreText.addView(text("Daily score", 12, MUTED, false));
-                scoreText.addView(text(DailyReview.scoreLabel(r.score), 17, INK, true));
-                scoreRow.addView(scoreText);
-                card.addView(scoreRow);
-                space(card, 6);
-                card.addView(text("Completion 50% · Focus time 30% · Estimate accuracy 20%", 11, MUTED, false));
+                space(card, 12);
+                RingView ring = new RingView(this, 12, 40, 13, MINT_SOFT, GREEN, INK);
+                ring.set(r.score / 100f, String.valueOf(r.score), DailyReview.scoreLabel(r.score));
+                card.addView(ring, new LinearLayout.LayoutParams(dp(150), dp(150)));
+            }
+            space(card, 14);
+            TextView cheer = text(r.encouragement(), 16, INK, true);
+            cheer.setGravity(Gravity.CENTER);
+            card.addView(cheer);
+            space(card, 14);
+            LinearLayout chips = new LinearLayout(this);
+            chips.setGravity(Gravity.CENTER);
+            chips.addView(chip("✓ " + r.completedTasks + " / " + r.plannedTasks + " done", MINT_SOFT, GREEN));
+            View gap = new View(this);
+            chips.addView(gap, new LinearLayout.LayoutParams(dp(8), 1));
+            chips.addView(chip("◷ " + DailyReview.formatMinutes(r.focusMinutes), MINT_SOFT, GREEN));
+            card.addView(chips);
+            if (r.score != null) {
+                space(card, 12);
+                TextView weights = text("Completion 50% · Focus 30% · Estimates 20%", 11, MUTED, false);
+                weights.setGravity(Gravity.CENTER);
+                card.addView(weights);
             }
             body.addView(card);
             String reminder = r.reminder();
             if (reminder != null) {
                 space(body, 14);
-                LinearLayout tip = card(MINT_SOFT);
-                tip.addView(text("💡 " + reminder, 14, INK, false));
+                boolean warning = r.overrun != null;
+                LinearLayout tip = card(warning ? WARM_SOFT : MINT_SOFT, false);
+                tip.addView(eyebrow(warning ? "HEADS-UP" : "NICE", warning ? WARM : GREEN));
+                space(tip, 6);
+                TextView tipText = text(reminder, 14, INK, false);
+                tipText.setLineSpacing(0, 1.25f);
+                tip.addView(tipText);
                 body.addView(tip);
             }
         }
-        space(body, 28);
-        TextView start = button("Start my day", MINT);
+        space(body, 26);
+        TextView start = button("Start my day  →", INK, Color.WHITE);
         start.setOnClickListener(v -> finishGreeting());
-        body.addView(start, new LinearLayout.LayoutParams(-1, dp(54)));
+        body.addView(start, new LinearLayout.LayoutParams(-1, dp(56)));
     }
 
     private void renderOverview(LinearLayout body) {
         long now = System.currentTimeMillis();
         LinearLayout header = new LinearLayout(this);
-        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setGravity(Gravity.TOP);
         LinearLayout titles = new LinearLayout(this);
         titles.setOrientation(LinearLayout.VERTICAL);
-        titles.addView(text(greeting(now), 14, MUTED, false));
-        titles.addView(text("Today", 30, INK, true));
-        titles.addView(text(longDate(now), 14, MUTED, false));
+        titles.addView(text(greeting(now), 13, MUTED, false));
+        titles.addView(text(new SimpleDateFormat("EEEE", Locale.US).format(new Date(now)), 32, INK, true));
+        titles.addView(text(new SimpleDateFormat("MMMM d", Locale.US).format(new Date(now)), 14, MUTED, false));
         header.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
-        TextView review = text("Yesterday ›", 14, GREEN, true);
-        review.setPadding(dp(8), dp(8), 0, dp(8));
+        Integer yesterdayScore = snapshot == null || snapshot.yesterday == null ? null : snapshot.yesterday.score;
+        TextView review = chip(yesterdayScore == null ? "Yesterday ›" : "Yesterday " + yesterdayScore + " ›", MINT_SOFT, GREEN);
         review.setOnClickListener(v -> { showingReview = true; render(); });
-        header.addView(review);
+        LinearLayout.LayoutParams reviewParams = new LinearLayout.LayoutParams(-2, -2);
+        reviewParams.topMargin = dp(18);
+        header.addView(review, reviewParams);
         body.addView(header);
         space(body, 20);
 
@@ -260,8 +286,10 @@ public class HomeActivity extends AppCompatActivity {
         if (snapshot.today == null) { body.addView(text("Could not read today's data.", 14, MUTED, false)); return; }
 
         if (!snapshot.hasProfile) {
-            LinearLayout setup = card(MINT_SOFT);
-            setup.addView(text("Set up your profile", 16, INK, true));
+            LinearLayout setup = card(MINT_SOFT, false);
+            setup.addView(eyebrow("GET STARTED", GREEN));
+            space(setup, 6);
+            setup.addView(text("Set up your profile  →", 16, INK, true));
             space(setup, 4);
             setup.addView(text("Tell Tempo when you wake, sleep and eat so it can plan your day.", 13, MUTED, false));
             setup.setOnClickListener(v -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
@@ -269,12 +297,26 @@ public class HomeActivity extends AppCompatActivity {
             space(body, 14);
         }
 
-        LinearLayout stats = card(Color.WHITE);
-        LinearLayout statsRow = new LinearLayout(this);
-        statsRow.addView(stat("Done", snapshot.today.completedTasks + " / " + snapshot.today.plannedTasks), new LinearLayout.LayoutParams(0, -2, 1));
-        statsRow.addView(stat("Focused today", DailyReview.formatMinutes(snapshot.today.focusMinutes)), new LinearLayout.LayoutParams(0, -2, 1));
-        stats.addView(statsRow);
-        body.addView(stats);
+        DailyReview today = snapshot.today;
+        LinearLayout summary = card(Color.WHITE, true);
+        summary.setOrientation(LinearLayout.HORIZONTAL);
+        summary.setGravity(Gravity.CENTER_VERTICAL);
+        RingView ring = new RingView(this, 8, 16, 0, MINT_SOFT, GREEN, INK);
+        ring.set(today.plannedTasks == 0 ? 0f : today.completedTasks / (float) today.plannedTasks,
+                today.completedTasks + "/" + today.plannedTasks, null);
+        summary.addView(ring, new LinearLayout.LayoutParams(dp(72), dp(72)));
+        LinearLayout summaryText = new LinearLayout(this);
+        summaryText.setOrientation(LinearLayout.VERTICAL);
+        summaryText.setPadding(dp(16), 0, 0, 0);
+        summaryText.addView(eyebrow("TODAY", GREEN));
+        space(summaryText, 4);
+        summaryText.addView(text(today.plannedTasks == 0 ? "No tasks planned yet"
+                : today.completedTasks + " of " + today.plannedTasks + " tasks done", 17, INK, true));
+        space(summaryText, 3);
+        summaryText.addView(text(DailyReview.formatMinutes(today.focusMinutes) + " focused · "
+                + DailyReview.formatMinutes(today.plannedMinutes) + " planned", 13, MUTED, false));
+        summary.addView(summaryText, new LinearLayout.LayoutParams(0, -2, 1));
+        body.addView(summary);
         space(body, 14);
 
         Row next = null;
@@ -283,56 +325,91 @@ public class HomeActivity extends AppCompatActivity {
             if (next == null || row.nextStart < next.nextStart) next = row;
         }
         if (next != null) {
-            LinearLayout card = card(Color.WHITE);
-            card.addView(text(next.nextStart <= now ? "NOW" : "NEXT UP", 12, GREEN, true));
-            space(card, 6);
-            card.addView(text(next.task.getTitle(), 19, INK, true));
-            space(card, 4);
-            card.addView(text(time(next.nextStart) + " – " + time(next.nextEnd), 14, MUTED, false));
-            space(card, 14);
-            TextView focus = button("Start focus", MINT);
+            LinearLayout hero = card(INK, true);
+            hero.setPadding(dp(20), dp(20), dp(20), dp(20));
+            hero.addView(eyebrow(nextLabel(next.nextStart, now), MINT));
+            space(hero, 8);
+            hero.addView(text(next.task.getTitle(), 21, Color.WHITE, true));
+            space(hero, 4);
+            hero.addView(text(time(next.nextStart) + " – " + time(next.nextEnd) + " · " + categoryName(next.task.getCategory()),
+                    13, HERO_MUTED, false));
+            space(hero, 16);
+            TextView focus = button("▶  Start focus", MINT, INK);
             final Task task = next.task;
             focus.setOnClickListener(v -> openTimer(task));
-            card.addView(focus, new LinearLayout.LayoutParams(-1, dp(46)));
-            body.addView(card);
-            space(body, 20);
+            hero.addView(focus, new LinearLayout.LayoutParams(-1, dp(46)));
+            body.addView(hero);
+            space(body, 22);
+        } else {
+            space(body, 8);
         }
 
-        body.addView(text("TODAY'S PLAN", 12, GREEN, true));
-        space(body, 10);
+        body.addView(eyebrow("TODAY'S PLAN", GREEN));
+        space(body, 12);
         if (snapshot.rows.isEmpty()) {
-            body.addView(text("Nothing planned yet. Tap “+ Add” to create a task and Tempo will fit it into your day.", 14, MUTED, false));
+            LinearLayout empty = card(Color.WHITE, false);
+            empty.addView(text("Nothing planned yet", 15, INK, true));
+            space(empty, 4);
+            empty.addView(text("Tap + to add a task and Tempo will fit it into your day.", 13, MUTED, false));
+            body.addView(empty);
         } else {
-            LinearLayout list = card(Color.WHITE);
             for (int i = 0; i < snapshot.rows.size(); i++) {
-                if (i > 0) { space(list, 10); rule(list); space(list, 10); }
-                list.addView(planRow(snapshot.rows.get(i)));
+                Row row = snapshot.rows.get(i);
+                body.addView(timelineRow(row, row == next, i == snapshot.rows.size() - 1));
             }
-            body.addView(list);
         }
     }
 
-    private View planRow(Row row) {
+    private View timelineRow(Row row, boolean current, boolean last) {
         boolean done = "COMPLETED".equals(row.task.getStatus());
         LinearLayout line = new LinearLayout(this);
-        line.setGravity(Gravity.CENTER_VERTICAL);
-        line.addView(text(time(row.start), 14, MUTED, true), new LinearLayout.LayoutParams(dp(58), -2));
+        FrameLayout rail = new FrameLayout(this);
+        if (!last) {
+            View track = new View(this);
+            track.setBackgroundColor(BORDER);
+            FrameLayout.LayoutParams trackParams = new FrameLayout.LayoutParams(dp(2), -1, Gravity.CENTER_HORIZONTAL);
+            trackParams.topMargin = dp(10);
+            rail.addView(track, trackParams);
+        }
+        View dot = new View(this);
+        GradientDrawable dotShape = new GradientDrawable();
+        dotShape.setShape(GradientDrawable.OVAL);
+        dotShape.setColor(categoryColor(row.task.getCategory()));
+        dotShape.setStroke(dp(current ? 4 : 2), current ? MINT_SOFT : BG);
+        dot.setBackground(dotShape);
+        int dotSize = dp(current ? 18 : 14);
+        FrameLayout.LayoutParams dotParams = new FrameLayout.LayoutParams(dotSize, dotSize, Gravity.CENTER_HORIZONTAL);
+        dotParams.topMargin = dp(current ? 1 : 3);
+        rail.addView(dot, dotParams);
+        line.addView(rail, new LinearLayout.LayoutParams(dp(18), -1));
+
         LinearLayout middle = new LinearLayout(this);
         middle.setOrientation(LinearLayout.VERTICAL);
-        middle.addView(text(row.task.getTitle(), 15, done ? MUTED : INK, true));
-        middle.addView(text(DailyReview.formatMinutes(row.minutes), 12, MUTED, false));
+        middle.setPadding(dp(14), 0, 0, dp(last ? 0 : 18));
+        TextView title = text(row.task.getTitle(), 15, done ? MUTED : INK, true);
+        if (done) title.setPaintFlags(title.getPaintFlags() | Paint.STRIKE_THRU_TEXT_FLAG);
+        middle.addView(title);
+        space(middle, 2);
+        middle.addView(text(time(row.start) + " · " + DailyReview.formatMinutes(row.minutes)
+                + " · " + categoryName(row.task.getCategory()), 12, MUTED, false));
         line.addView(middle, new LinearLayout.LayoutParams(0, -2, 1));
-        if (done) line.addView(text("✓", 18, GREEN, true));
+        if (done) line.addView(text("✓", 17, GREEN, true));
         return line;
     }
 
     private View bottomBar() {
         LinearLayout bar = new LinearLayout(this);
-        bar.setPadding(dp(16), dp(6), dp(16), dp(14));
-        bar.setBackgroundColor(BG);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(8), 0, dp(8), 0);
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(Color.WHITE);
+        bg.setCornerRadius(dp(24));
+        bar.setBackground(bg);
+        bar.setElevation(dp(8));
         TextView schedule = barAction("Schedule");
         schedule.setOnClickListener(v -> startActivity(new Intent(this, SchedulePreviewActivity.class)));
-        TextView add = barAction("＋ Add");
+        TextView add = button("+", INK, Color.WHITE);
+        add.setTextSize(26);
         add.setOnClickListener(v -> {
             Intent intent = new Intent(this, AddTaskActivity.class);
             intent.putExtra("selectedDayMillis", startOfDay(System.currentTimeMillis()));
@@ -340,9 +417,9 @@ public class HomeActivity extends AppCompatActivity {
         });
         TextView profile = barAction("Profile");
         profile.setOnClickListener(v -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
-        bar.addView(schedule, new LinearLayout.LayoutParams(0, dp(48), 1));
-        bar.addView(add, new LinearLayout.LayoutParams(0, dp(48), 1));
-        bar.addView(profile, new LinearLayout.LayoutParams(0, dp(48), 1));
+        bar.addView(schedule, new LinearLayout.LayoutParams(0, dp(52), 1));
+        bar.addView(add, new LinearLayout.LayoutParams(dp(52), dp(52)));
+        bar.addView(profile, new LinearLayout.LayoutParams(0, dp(52), 1));
         return bar;
     }
 
@@ -355,6 +432,25 @@ public class HomeActivity extends AppCompatActivity {
     }
 
     // ---------------------------------------------------------------- helpers
+
+    private static String nextLabel(long start, long now) {
+        if (start <= now) return "NOW";
+        long minutes = (start - now + MINUTE - 1) / MINUTE;
+        if (minutes <= 120) return "NEXT UP · IN " + DailyReview.formatMinutes((int) minutes).toUpperCase(Locale.US);
+        return "NEXT UP · " + time(start);
+    }
+
+    private static int categoryColor(String category) {
+        if ("Work".equals(category)) return Color.rgb(76, 111, 181);
+        if ("Life".equals(category)) return Color.rgb(208, 138, 62);
+        return Color.rgb(63, 143, 107);
+    }
+
+    private static String categoryName(String category) {
+        if ("Work".equals(category)) return "Work";
+        if ("Life".equals(category)) return "Life";
+        return "Study";
+    }
 
     private static String greeting(long now) {
         Calendar c = Calendar.getInstance();
@@ -387,46 +483,55 @@ public class HomeActivity extends AppCompatActivity {
     }
 
     private static String longDate(long millis) {
-        return new SimpleDateFormat("EEEE, MMM d", Locale.US).format(new Date(millis));
+        return new SimpleDateFormat("EEEE, MMMM d", Locale.US).format(new Date(millis));
     }
 
     private static String time(long millis) {
         return new SimpleDateFormat("HH:mm", Locale.US).format(new Date(millis));
     }
 
-    private LinearLayout stat(String label, String value) {
-        LinearLayout box = new LinearLayout(this);
-        box.setOrientation(LinearLayout.VERTICAL);
-        box.addView(text(label, 12, MUTED, false));
-        space(box, 2);
-        box.addView(text(value, 20, INK, true));
-        return box;
+    private TextView eyebrow(String value, int color) {
+        TextView view = text(value, 11, color, true);
+        view.setLetterSpacing(0.14f);
+        return view;
     }
 
-    private LinearLayout card(int color) {
+    private TextView chip(String value, int background, int color) {
+        TextView view = text(value, 12, color, true);
+        view.setSingleLine(true);
+        view.setPadding(dp(12), dp(6), dp(12), dp(6));
+        GradientDrawable bg = new GradientDrawable();
+        bg.setColor(background);
+        bg.setCornerRadius(dp(99));
+        view.setBackground(bg);
+        return view;
+    }
+
+    /** Rounded card; raised cards get a soft shadow instead of a border. */
+    private LinearLayout card(int color, boolean raised) {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(16), dp(18), dp(16));
+        card.setPadding(dp(18), dp(18), dp(18), dp(18));
         GradientDrawable bg = new GradientDrawable();
         bg.setColor(color);
-        bg.setCornerRadius(dp(18));
-        if (color == Color.WHITE) bg.setStroke(dp(1), BORDER);
+        bg.setCornerRadius(dp(22));
         card.setBackground(bg);
+        if (raised) card.setElevation(dp(2));
         return card;
     }
 
-    private TextView button(String label, int color) {
-        TextView view = text(label, 16, INK, true);
+    private TextView button(String label, int background, int color) {
+        TextView view = text(label, 16, color, true);
         view.setGravity(Gravity.CENTER);
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(color);
-        bg.setCornerRadius(dp(17));
+        bg.setColor(background);
+        bg.setCornerRadius(dp(16));
         view.setBackground(bg);
         return view;
     }
 
     private TextView barAction(String label) {
-        TextView view = text(label, 15, INK, true);
+        TextView view = text(label, 13, MUTED, true);
         view.setGravity(Gravity.CENTER);
         return view;
     }
@@ -438,12 +543,6 @@ public class HomeActivity extends AppCompatActivity {
         view.setTextColor(color);
         if (bold) view.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
         return view;
-    }
-
-    private void rule(LinearLayout parent) {
-        View line = new View(this);
-        line.setBackgroundColor(BORDER);
-        parent.addView(line, new LinearLayout.LayoutParams(-1, dp(1)));
     }
 
     private void space(LinearLayout parent, int size) {
