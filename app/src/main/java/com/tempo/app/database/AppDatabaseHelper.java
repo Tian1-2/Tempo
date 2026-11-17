@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class AppDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "tempo.db";
-    private static final int DATABASE_VERSION = 1;
+    private static final int DATABASE_VERSION = 3;
 
     public AppDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -84,11 +84,11 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                         "FOREIGN KEY(task_id) REFERENCES tasks(task_id)" +
                         ")"
         );
+        com.tempo.app.learning.LearningStore.createTables(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
-        // 第一版留空。以后改字段时：提高 DATABASE_VERSION，
-        // 这里写 ALTER TABLE 或 DROP + onCreate 的迁移逻辑。
+        if (oldVersion < 3) com.tempo.app.learning.LearningStore.upgradeTables(db);
     }
 }

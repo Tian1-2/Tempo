@@ -27,6 +27,9 @@ public class MainHubPlaceholderActivity extends AppCompatActivity {
         TextView profile = label("用户档案设置", 16, false);
         profile.setOnClickListener(v -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
         page.addView(profile);
+        TextView insights = label("Insights · 时间洞察", 16, false);
+        insights.setOnClickListener(v -> startActivity(new Intent(this, InsightsActivity.class)));
+        page.addView(insights);
         TextView schedule = label("返回日程", 16, false);
         schedule.setOnClickListener(v -> { startActivity(new Intent(this, SchedulePreviewActivity.class)); finish(); });
         page.addView(schedule);

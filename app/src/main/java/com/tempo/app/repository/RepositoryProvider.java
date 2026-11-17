@@ -18,6 +18,8 @@ public class RepositoryProvider {
         }
     }
 
+    public static AppDatabaseHelper getDatabaseHelper() { return helper; }
+
     public static TaskRepository getTaskRepository() {
         return new TaskRepository(
                 new TaskDao(helper),

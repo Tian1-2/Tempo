@@ -88,7 +88,7 @@ public class TaskDao {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         try (Cursor cursor = db.query("tasks", null,
-                "status = ?", new String[]{"PENDING"},
+                "status IN (?, ?)", new String[]{"PENDING", "IN_PROGRESS"},
                 null, null, "deadline ASC")) {
             while (cursor.moveToNext()) {
                 tasks.add(cursorToTask(cursor));
