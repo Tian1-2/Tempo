@@ -14,9 +14,9 @@ import java.util.concurrent.Executors;
 
 public class TaskRepository {
 
-    // 后台线程池：所有数据库操作都丢到这里执行
+    // Background executor: every database call runs here
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
-    // 主线程 Handler：把结果回调回 UI 线程
+    // Main-thread handler: delivers results back to the UI thread
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
 
     private final TaskDao taskDao;
@@ -27,15 +27,15 @@ public class TaskRepository {
         this.feedbackDao = feedbackDao;
     }
 
-    // ==================== 回调接口 ====================
-    // 因为数据库操作在后台线程，结果不能直接 return，
-    // 必须通过 callback 回传。第一版只定义两个通用回调。
+    // ==================== Callback ====================
+    // Database work happens off the UI thread, so results cannot be returned directly;
+    // they are delivered through this callback.
     public interface Callback<T> {
         void onSuccess(T result);
         void onError(Exception e);
     }
 
-    // ==================== Task 相关 ====================
+    // ==================== Tasks ====================
 
     public void addTask(Task task, Callback<Long> callback) {
         executor.execute(() -> {
@@ -103,7 +103,7 @@ public class TaskRepository {
         });
     }
 
-    // ==================== Feedback 相关（转发给 TaskFeedbackDao）====================
+    // ==================== Feedback (delegates to TaskFeedbackDao) ====================
 
     public void addFeedback(TaskFeedback fb, Callback<Long> callback) {
         executor.execute(() -> {
@@ -127,8 +127,8 @@ public class TaskRepository {
         });
     }
 
-    // 给 C 用的同步版本（C 的算法本身就在后台线程里跑，不需要再切线程）
-    // 注意：只能在非主线程调用，否则会阻塞 UI
+    // Synchronous version for the scheduler, which already runs on a background thread.
+    // Never call it on the main thread: it would block the UI.
     public List<Task> getPendingTasksSync() {
         return taskDao.getPendingTasks();
     }

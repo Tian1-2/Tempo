@@ -76,6 +76,7 @@ public final class DurationLearning {
 
     public static String categoryKey(String value) {
         String result = key(value);
+        // Legacy rows may store Chinese category names; keep these aliases.
         if (result.equals("学习")) return "study";
         if (result.equals("工作")) return "work";
         if (result.equals("生活")) return "life";

@@ -14,28 +14,28 @@ public final class GenerationPreflight {
     private GenerationPreflight() { }
 
     public static void checkDate(long selectedDay, long today) {
-        if (selectedDay < today) throw new Problem("不能为过去的日期生成新计划。请先回到今天，或选择未来日期。", Action.TODAY);
+        if (selectedDay < today) throw new Problem("Plans cannot be generated for past dates. Go back to today or choose a future date.", Action.TODAY);
     }
 
     public static void check(UserProfile profile, List<Task> pendingTasks) {
-        if (profile == null) throw new Problem("请先保存用户档案中的作息、单次专注时长、休息时长和每日可用时间。", Action.PROFILE);
+        if (profile == null) throw new Problem("Save your routine, focus length, break length and daily task time in Profile first.", Action.PROFILE);
         if (!validTime(profile.getWakeTime()) || !validTime(profile.getSleepTime())) {
-            throw new Problem("起床和睡觉时间需要使用 HH:mm 格式，例如 07:00、23:30。", Action.PROFILE);
+            throw new Problem("Wake-up and bedtime must use HH:mm, for example 07:00 and 23:30.", Action.PROFILE);
         }
         if (profile.getWakeTime().compareTo(profile.getSleepTime()) >= 0) {
-            throw new Problem("当前排程要求起床时间早于同一天的睡觉时间，请检查用户档案。", Action.PROFILE);
+            throw new Problem("Wake-up must be earlier than bedtime on the same day. Please check your profile.", Action.PROFILE);
         }
         if (profile.getFocusDuration() <= 0 || profile.getBreakDuration() < 0 || profile.getDailyCapacity() <= 0) {
-            throw new Problem("单次专注时长和每日可用时间必须大于 0，休息时长不能为负数。", Action.PROFILE);
+            throw new Problem("Focus length and daily task time must be above 0, and breaks cannot be negative.", Action.PROFILE);
         }
         if (pendingTasks.isEmpty()) {
-            throw new Problem("当前没有可安排的待办任务。请先添加一个任务，再返回日程点击生成。", Action.ADD_TASK);
+            throw new Problem("There are no pending tasks to plan. Add a task first, then generate the plan.", Action.ADD_TASK);
         }
         for (Task task : pendingTasks) {
             int minutes = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
             if (minutes <= 0 || task.getDifficulty() < 1 || task.getDifficulty() > 5
                     || task.getImportance() < 1 || task.getImportance() > 5) {
-                throw new Problem("任务「" + task.getTitle() + "」需要正数的预计用时，以及 1–5 的难度和重要程度。请先修正任务条件。", Action.NONE);
+                throw new Problem("\"" + task.getTitle() + "\" needs a positive duration and a difficulty and importance from 1 to 5. Please edit the task.", Action.NONE);
             }
         }
     }

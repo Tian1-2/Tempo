@@ -43,7 +43,7 @@ public class UserProfileRepository {
         });
     }
 
-    // 给 C 用的同步版本
+    // Synchronous version for the scheduler
     public UserProfile getProfileSync() {
         return userProfileDao.getProfile();
     }

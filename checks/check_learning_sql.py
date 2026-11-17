@@ -10,9 +10,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 JAVA = ROOT / "app/src/main/java/com/tempo/app"
-database_source = (JAVA / "database/AppDatabaseHelper.java").read_text()
-learning_source = (JAVA / "learning/LearningStore.java").read_text()
-dao_source = (JAVA / "database/ScheduleDao.java").read_text()
+database_source = (JAVA / "database/AppDatabaseHelper.java").read_text(encoding="utf-8")
+learning_source = (JAVA / "learning/LearningStore.java").read_text(encoding="utf-8")
+dao_source = (JAVA / "database/ScheduleDao.java").read_text(encoding="utf-8")
 
 
 def literal(expression):

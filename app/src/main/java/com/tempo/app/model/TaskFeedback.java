@@ -2,21 +2,21 @@ package com.tempo.app.model;
 
 public class TaskFeedback {
 
-    private int feedbackId;          // 主键
-    private int taskId;              // 外键，对应 tasks.task_id
+    private int feedbackId;          // primary key
+    private int taskId;              // foreign key to tasks.task_id
 
-    private int actualDuration;      // 实际耗时（分钟）
-    private int actualDifficulty;    // 实际体感难度 1–5
+    private int actualDuration;      // actual minutes
+    private int actualDifficulty;    // felt difficulty 1-5
 
     private String completionStatus; // COMPLETED / PARTIAL / NOT_COMPLETED
-    private long completedAt;        // 完成时间（毫秒）
+    private long completedAt;        // saved at (ms)
 
-    private String notes;            // 可选备注
+    private String notes;            // optional notes
 
     public TaskFeedback() {
     }
 
-    // ---- Getter / Setter（Generate 自动生成）----
+    // ---- Getters / setters ----
 
     public int getFeedbackId() { return feedbackId; }
     public void setFeedbackId(int feedbackId) { this.feedbackId = feedbackId; }

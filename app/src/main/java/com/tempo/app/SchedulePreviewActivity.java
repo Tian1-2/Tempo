@@ -141,9 +141,9 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 tasks.addAll(result);
                 demoData = tasks.isEmpty();
                 if (demoData) {
-                    tasks.add(demoTask(-1, "阅读课程资料", "Study", 70));
-                    tasks.add(demoTask(-2, "完成项目报告", "Work", 90));
-                    tasks.add(demoTask(-3, "散步与整理", "Life", 45));
+                    tasks.add(demoTask(-1, "Read course notes", "Study", 70));
+                    tasks.add(demoTask(-2, "Finish project report", "Work", 90));
+                    tasks.add(demoTask(-3, "Walk and tidy up", "Life", 45));
                 }
                 String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(selectedDayMillis));
                 RepositoryProvider.getScheduleRepository().getScheduleByDate(date, new TaskRepository.Callback<List<ScheduleItem>>() {
@@ -183,7 +183,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         FrameLayout.LayoutParams backParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.START | Gravity.CENTER_VERTICAL);
         backParams.leftMargin = 0;
         header.addView(back, backParams);
-        TextView month = label(new SimpleDateFormat("yyyy年M月", Locale.CHINA).format(new Date(selectedDayMillis)),
+        TextView month = label(new SimpleDateFormat("MMMM yyyy", Locale.US).format(new Date(selectedDayMillis)),
                 19, INK, true);
         month.setGravity(Gravity.CENTER);
         header.addView(month, new FrameLayout.LayoutParams(-2, -1, Gravity.CENTER));
@@ -201,14 +201,14 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(22), 0, dp(22), 0);
-        TextView dayLabel = label(selectedDayMillis == startOfDay(System.currentTimeMillis()) ? "今日事项" : "当日事项",
+        TextView dayLabel = label(selectedDayMillis == startOfDay(System.currentTimeMillis()) ? "Today's tasks" : "Tasks this day",
                 16, INK, true);
         row.addView(dayLabel);
         TextView summary = label("0/0", 16, Color.rgb(52, 126, 91), true);
         LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(0, -2, 1);
         countParams.leftMargin = dp(9);
         row.addView(summary, countParams);
-        TextView toggle = label(includeBreaks ? "休息  开" : "休息  关", 12, MUTED, false);
+        TextView toggle = label(includeBreaks ? "Breaks  on" : "Breaks  off", 12, MUTED, false);
         toggle.setGravity(Gravity.CENTER);
         toggle.setPadding(dp(12), dp(7), dp(12), dp(7));
         toggle.setBackground(shape(Color.rgb(232, 237, 233), 12));
@@ -219,7 +219,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         addGenerationAction();
         spacer(8);
         if (demoData && !schedule.isEmpty()) {
-            TextView demo = label("示例日程 · 用于预览排版，不会写入数据库", 12, MUTED, false);
+            TextView demo = label("Sample schedule · preview only, not saved", 12, MUTED, false);
             demo.setPadding(dp(22), 0, dp(22), 0);
             content.addView(demo);
         }
@@ -257,7 +257,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         addTimeline(blocks, byId);
         if (sessions.isEmpty()) {
             spacerIn(timelineBody, 14);
-            timelineBody.addView(label("这一天还没有生成计划。任务会在排程后出现在对应时间。", 13, MUTED, false));
+            timelineBody.addView(label("Nothing planned for this day yet. Tasks appear here once a plan is generated.", 13, MUTED, false));
         }
         spacerIn(timelineBody, 26);
         timelineBody.addView(label("TEMPO  ·  FIND YOUR RHYTHM", 11, MUTED, true));
@@ -286,15 +286,15 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(dp(22), 0, dp(22), 0);
-        TextView hint = label(schedule.isEmpty() ? "先生成计划，再开始专注" : "按选中的日期安排", 12, MUTED, false);
+        TextView hint = label(schedule.isEmpty() ? "Generate a plan, then start focusing" : "Plan for the selected day", 12, MUTED, false);
         LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(0, -2, 1);
         hintParams.rightMargin = dp(12);
         actions.addView(hint, hintParams);
-        TextView generate = label(GENERATING.get() ? "正在生成…" : "生成日程", 14, INK, true);
+        TextView generate = label(GENERATING.get() ? "Generating…" : "Generate plan", 14, INK, true);
         generate.setGravity(Gravity.CENTER);
         generate.setPadding(dp(16), dp(12), dp(16), dp(12));
         generate.setMinHeight(dp(48));
-        generate.setBackground(shape(MINT, 14));
+        generate.setBackground(shape(MINT, 99)); // pill, like chips on the home page
         generate.setEnabled(!GENERATING.get());
         generate.setAlpha(GENERATING.get() ? .5f : 1f);
         generate.setOnClickListener(v -> requestGeneration());
@@ -309,14 +309,14 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             GenerationPreflight.checkDate(requestedDay, startOfDay(System.currentTimeMillis()));
         } catch (GenerationPreflight.Problem problem) { showGenerationProblem(problem); return; }
         if (getSharedPreferences("tempo_focus_timer", MODE_PRIVATE).getInt("taskId", Integer.MIN_VALUE) != Integer.MIN_VALUE) {
-            showGenerationProblem(new GenerationPreflight.Problem("请先结束并处理当前专注计时，再生成日程。", GenerationPreflight.Action.NONE));
+            showGenerationProblem(new GenerationPreflight.Problem("Finish the running focus timer before generating a plan.", GenerationPreflight.Action.NONE));
             return;
         }
-        String date = new SimpleDateFormat("M月d日", Locale.CHINA).format(new Date(requestedDay));
-        new AlertDialog.Builder(this).setTitle("生成 " + date + " 的日程")
-                .setMessage("按已保存的作息、剩余用时和每日可用时间安排待办与进行中的任务。三餐各预留 30 分钟；当前尚未接入课程、会议等固定日程。\n\n重新生成会替换尚未开始的自动安排；已过去、手动调整和已完成的时段会保留。")
-                .setNegativeButton("取消", null)
-                .setPositiveButton("生成", (dialog, which) -> generateForDay(requestedDay)).show();
+        String date = new SimpleDateFormat("MMM d", Locale.US).format(new Date(requestedDay));
+        new AlertDialog.Builder(this).setTitle("Generate plan for " + date)
+                .setMessage("Plans your pending and in-progress tasks using your saved routine, remaining time and daily task time. Each meal keeps 30 minutes free; fixed events such as classes are not included yet.\n\nRegenerating replaces automatic slots that have not started. Past, manually adjusted and completed slots are kept.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Generate", (dialog, which) -> generateForDay(requestedDay)).show();
     }
 
     private void generateForDay(long requestedDay) {
@@ -362,26 +362,26 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             totalMinutes += (session.interval.end - session.interval.start) / 60_000L;
         }
         StringBuilder message = new StringBuilder(date).append("\n\n");
-        if (result.sessions.isEmpty()) message.append("没有找到符合条件的可用时段。\n");
-        else message.append("已安排 ").append(arrangedTasks.size()).append(" 项任务，共 ")
-                .append(totalMinutes).append(" 分钟，分为 ").append(result.sessions.size()).append(" 段。\n")
-                .append("关闭后可点击时间轴上的任务，开始专注。\n");
+        if (result.sessions.isEmpty()) message.append("No suitable free time was found.\n");
+        else message.append("Planned ").append(arrangedTasks.size()).append(arrangedTasks.size() == 1 ? " task, " : " tasks, ")
+                .append(totalMinutes).append(" min in ").append(result.sessions.size()).append(result.sessions.size() == 1 ? " block.\n" : " blocks.\n")
+                .append("Tap a task on the timeline to start focusing.\n");
         if (!result.unscheduledTasks.isEmpty()) {
-            message.append("\n未排完的任务：\n");
+            message.append("\nNot fully planned:\n");
             int shown = 0;
             for (ScheduleGenerator.UnscheduledTask task : result.unscheduledTasks) {
-                if (shown++ >= 8) { message.append("另有 ").append(result.unscheduledTasks.size() - 8).append(" 项未排完。\n"); break; }
-                message.append("• ").append(names.getOrDefault(task.taskId, "任务 " + task.taskId))
-                        .append("：剩余 ").append(task.remainingMinutes).append(" 分钟（")
-                        .append(task.reason == ScheduleGenerator.Reason.DEADLINE ? "截止时间前可用时间不足" : "当日可用时间或每日容量不足")
+                if (shown++ >= 8) { message.append("…and ").append(result.unscheduledTasks.size() - 8).append(" more.\n"); break; }
+                message.append("• ").append(names.getOrDefault(task.taskId, "Task " + task.taskId))
+                        .append(": ").append(task.remainingMinutes).append(" min left (")
+                        .append(task.reason == ScheduleGenerator.Reason.DEADLINE ? "not enough time before the deadline" : "not enough free time or daily task time")
                         .append("）\n");
             }
-            message.append("\n请检查任务截止时间与档案设置。测试新流程时可添加一个无截止时间的短任务。");
+            message.append("\nCheck task deadlines and your profile. A short task without a deadline is the easiest way to test.");
         }
         AlertDialog.Builder dialog = new AlertDialog.Builder(this)
-                .setTitle(result.sessions.isEmpty() ? "暂未排入日程" : "日程已生成")
-                .setMessage(message.toString()).setPositiveButton("知道了", null);
-        if (result.sessions.isEmpty()) dialog.setNeutralButton("添加任务", (d, which) -> addTaskForSelectedDay());
+                .setTitle(result.sessions.isEmpty() ? "Nothing planned yet" : "Plan ready")
+                .setMessage(message.toString()).setPositiveButton("Got it", null);
+        if (result.sessions.isEmpty()) dialog.setNeutralButton("Add task", (d, which) -> addTaskForSelectedDay());
         dialog.show();
     }
 
@@ -389,15 +389,15 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         GenerationPreflight.Action action = error instanceof GenerationPreflight.Problem
                 ? ((GenerationPreflight.Problem) error).action : GenerationPreflight.Action.NONE;
         String message = error instanceof GenerationPreflight.Problem ? error.getMessage()
-                : "请检查任务条件、档案和手动锁定的安排是否冲突。\n\n详细信息：" + error.getMessage();
-        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("暂时无法生成日程")
-                .setMessage(message).setNegativeButton("关闭", null);
+                : "Check the task details, your profile and any manually locked slots for conflicts.\n\nDetails: " + error.getMessage();
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Could not generate a plan")
+                .setMessage(message).setNegativeButton("Close", null);
         if (action == GenerationPreflight.Action.PROFILE) {
-            dialog.setPositiveButton("设置档案", (d, which) -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
+            dialog.setPositiveButton("Open profile", (d, which) -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
         } else if (action == GenerationPreflight.Action.ADD_TASK) {
-            dialog.setPositiveButton("添加任务", (d, which) -> addTaskForSelectedDay());
+            dialog.setPositiveButton("Add task", (d, which) -> addTaskForSelectedDay());
         } else if (action == GenerationPreflight.Action.TODAY) {
-            dialog.setPositiveButton("回到今天", (d, which) -> {
+            dialog.setPositiveButton("Back to today", (d, which) -> {
                 selectedDayMillis = startOfDay(System.currentTimeMillis());
                 pendingJumpDay = selectedDayMillis;
                 jumpToTime = true;
@@ -415,7 +415,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         first.add(Calendar.DAY_OF_MONTH, -offset);
         LinearLayout strip = new LinearLayout(this);
         strip.setPadding(dp(22), 0, dp(22), 0);
-        String[] names = {"一", "二", "三", "四", "五", "六", "日"};
+        String[] names = {"M", "T", "W", "T", "F", "S", "S"};
         for (int index = 0; index < 7; index++) {
             final long day = first.getTimeInMillis();
             LinearLayout cell = new LinearLayout(this);
@@ -464,7 +464,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     }
 
     private void addTimeline(List<ScheduleDisplayBlocks.Block> blocks, Map<Integer, Task> byId) {
-        TextView scaleNote = label("短时段自动展开 · 时长以起止时间为准", 11, MUTED, false);
+        TextView scaleNote = label("Short blocks are enlarged for readability · times are exact", 11, MUTED, false);
         scaleNote.setPadding(dp(62), 0, dp(10), dp(8));
         if (!blocks.isEmpty()) timelineBody.addView(scaleNote);
         FrameLayout canvas = new FrameLayout(this);
@@ -493,15 +493,15 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             Task task = byId.get((int) block.taskId);
             int start = timelineMinute(block.startMillis), end = timelineMinute(block.endMillis);
             if (task == null || end <= start) continue;
-            String duration = block.taskMinutes + " 分钟任务";
-            if (includeBreaks && block.breakMinutes > 0) duration += " + " + block.breakMinutes + " 分钟休息";
+            String duration = block.taskMinutes + " min task";
+            if (includeBreaks && block.breakMinutes > 0) duration += " + " + block.breakMinutes + " min break";
             String description = task.getTitle() + "\n" + clock(block.startMillis) + "–" + clock(block.endMillis)
                     + "  ·  " + duration;
             TextView event = label(description, 13, INK, true);
             event.setGravity(Gravity.CENTER_VERTICAL);
             event.setPadding(dp(12), dp(8), dp(8), dp(8));
             event.setMinHeight(dp(48));
-            event.setContentDescription(description + ("COMPLETED".equals(task.getStatus()) ? "，已完成" : "，未完成"));
+            event.setContentDescription(description + ("COMPLETED".equals(task.getStatus()) ? ", completed" : ", not completed"));
             event.setBackground(shape("COMPLETED".equals(task.getStatus()) ? Color.rgb(229, 233, 230)
                     : "Work".equals(task.getCategory()) ? Color.rgb(219, 231, 245)
                     : "Life".equals(task.getCategory()) ? Color.rgb(249, 233, 211) : MINT, 12));
@@ -522,7 +522,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 }
                 if (end <= start || occupied) continue;
                 int length = (int) ((rest.end - rest.start) / 60_000L);
-                TextView restView = label("休息 " + length + " 分钟", 11, MUTED, false);
+                TextView restView = label("Break " + length + " min", 11, MUTED, false);
                 restView.setGravity(Gravity.CENTER_VERTICAL);
                 restView.setPadding(dp(12), dp(4), dp(8), dp(4));
                 restView.setMinHeight(dp(28));
@@ -599,32 +599,32 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         LinearLayout bar = new LinearLayout(this);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(0, dp(4), 0, dp(8));
-        TextView today = bottomAction("今天");
+        TextView today = bottomAction("Today");
         today.setOnClickListener(v -> {
             selectedDayMillis = startOfDay(System.currentTimeMillis());
             pendingJumpDay = selectedDayMillis;
             jumpToTime = true; schedule.clear(); render(); loadData();
         });
         bar.addView(today, new LinearLayout.LayoutParams(0, dp(48), 1));
-        TextView timer = bottomAction("计时");
+        TextView timer = bottomAction("Timer");
         timer.setOnClickListener(v -> {
             SharedPreferences prefs = getSharedPreferences("tempo_focus_timer", MODE_PRIVATE);
             int active = prefs.getInt("taskId", Integer.MIN_VALUE);
             if (active == Integer.MIN_VALUE) {
-                new AlertDialog.Builder(this).setMessage("还没有进行中的计时。请先打开一项日程并点“开始专注”。")
-                        .setPositiveButton("好的", null).show();
+                new AlertDialog.Builder(this).setMessage("No timer is running. Open a task on the timeline and tap Start focus.")
+                        .setPositiveButton("OK", null).show();
                 return;
             }
             Task found = null;
             for (Task task : tasks) if (task.getTaskId() == active) found = task;
             Intent intent = new Intent(this, FocusTimerActivity.class);
             intent.putExtra("taskId", active);
-            intent.putExtra("title", found == null ? "当前任务" : found.getTitle());
+            intent.putExtra("title", found == null ? "Current task" : found.getTitle());
             if (found != null) intent.putExtra("targetMinutes", focusMinutes(found));
             startActivity(intent);
         });
         bar.addView(timer, new LinearLayout.LayoutParams(0, dp(48), 1));
-        TextView add = bottomAction("＋ 添加");
+        TextView add = bottomAction("＋ Add");
         add.setOnClickListener(v -> addTaskForSelectedDay());
         bar.addView(add, new LinearLayout.LayoutParams(0, dp(48), 1));
         content.addView(bar);
@@ -680,29 +680,29 @@ public class SchedulePreviewActivity extends AppCompatActivity {
 
     private void openScheduleDetail(Task task, ScheduleDisplayBlocks.Block block) {
         LinearLayout body = panel(WHITE);
-        body.addView(label("日程安排", 12, Color.rgb(52, 126, 91), true));
+        body.addView(label("SCHEDULED", 11, Color.rgb(52, 126, 91), true));
         spacerIn(body, 8);
         body.addView(label(task.getTitle(), 22, INK, true));
         spacerIn(body, 8);
         body.addView(label(clock(block.startMillis) + "—" + clock(block.endMillis)
-                + "  ·  计划 " + block.taskMinutes + " 分钟"
-                + (block.breakMinutes > 0 ? " + 休息 " + block.breakMinutes + " 分钟" : ""), 14, MUTED, false));
+                + "  ·  " + block.taskMinutes + " min planned"
+                + (block.breakMinutes > 0 ? " + " + block.breakMinutes + " min break" : ""), 14, MUTED, false));
         spacerIn(body, 18);
         View divider = new View(this); divider.setBackgroundColor(Color.rgb(225, 231, 226));
         body.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         spacerIn(body, 16);
-        body.addView(label("截止时间  " + (task.getDeadline() > 0
-                ? new SimpleDateFormat("M月d日 HH:mm", Locale.CHINA).format(new Date(task.getDeadline())) : "未设置"), 14, INK, false));
+        body.addView(label("Deadline  " + (task.getDeadline() > 0
+                ? new SimpleDateFormat("MMM d, HH:mm", Locale.US).format(new Date(task.getDeadline())) : "None"), 14, INK, false));
         spacerIn(body, 8);
-        body.addView(label("难度 " + task.getDifficulty() + "/5   ·   重要程度 " + task.getImportance() + "/5", 14, INK, false));
+        body.addView(label("Difficulty " + task.getDifficulty() + "/5   ·   Importance " + task.getImportance() + "/5", 14, INK, false));
         spacerIn(body, 8);
-        body.addView(label("预估 " + task.getEstimatedDuration() + " 分钟 · 预测总用时 " + (task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration()) + " 分钟 · "
+        body.addView(label("Estimate " + task.getEstimatedDuration() + " min · Tempo predicts " + (task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration()) + " min · "
                 + categoryName(task.getCategory()), 14, MUTED, false));
         if (task.getDescription() != null && !task.getDescription().trim().isEmpty()) {
             spacerIn(body, 10); body.addView(label(task.getDescription(), 13, MUTED, false));
         }
         spacerIn(body, 20);
-        body.addView(label("安排时间 · 可手动调整", 14, INK, true));
+        body.addView(label("Time slots · tap to adjust", 14, INK, true));
         spacerIn(body, 9);
         ScrollView detailScroll = new ScrollView(this);
         detailScroll.addView(body);
@@ -711,21 +711,23 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             if (item.getTaskId() != task.getTaskId() || item.getStartTime() < block.startMillis
                     || item.getEndTime() > block.endMillis) continue;
             TextView edit = detailAction(clock(item.getStartTime()) + "—" + clock(item.getEndTime())
-                    + (item.isManuallyEdited() ? "  已调整  ›" : "  推荐  ›"), BG);
+                    + (item.isManuallyEdited() ? "  adjusted  ›" : "  suggested  ›"), BG);
             edit.setOnClickListener(v -> { detail.dismiss(); editSessionTimeTyped(task, item); });
             body.addView(edit); spacerIn(body, 8);
         }
         spacerIn(body, 9);
         if (task.getTaskId() > 0) {
-            TextView editTask = detailAction("编辑任务条件", BG);
+            TextView editTask = detailAction("Edit task", BG);
             editTask.setOnClickListener(v -> { detail.dismiss(); editTaskInfo(task); });
             body.addView(editTask); spacerIn(body, 10);
         }
-        TextView start = detailAction("COMPLETED".equals(task.getStatus()) ? "任务已完成" : "开始专注  →", MINT);
+        TextView start = detailAction("COMPLETED".equals(task.getStatus()) ? "Task completed" : "Start focus  →",
+                "COMPLETED".equals(task.getStatus()) ? MINT : INK);
+        if (!"COMPLETED".equals(task.getStatus())) start.setTextColor(WHITE); // app-wide primary action
         start.setEnabled(!"COMPLETED".equals(task.getStatus()));
         start.setOnClickListener(v -> { detail.dismiss(); openTimer(task); });
         body.addView(start);
-        TextView close = label("关闭", 14, MUTED, false);
+        TextView close = label("Close", 14, MUTED, false);
         close.setGravity(Gravity.CENTER);
         close.setOnClickListener(v -> detail.dismiss());
         body.addView(close, new LinearLayout.LayoutParams(-1, dp(44)));
@@ -734,7 +736,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     }
 
     private String categoryName(String category) {
-        return "Work".equals(category) ? "工作" : "Life".equals(category) ? "生活" : "学习";
+        return "Work".equals(category) ? "Work" : "Life".equals(category) ? "Life" : "Study";
     }
 
     private TextView detailAction(String text, int color) {
@@ -746,7 +748,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         return view;
     }
 
-    private String value(String text) { return text == null || text.trim().isEmpty() ? "未设置" : text; }
+    private String value(String text) { return text == null || text.trim().isEmpty() ? "Not set" : text; }
 
     private void editTaskInfo(Task source) {
         if (source.getTaskId() > 0) {
@@ -759,21 +761,21 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         LinearLayout form = new LinearLayout(this);
         form.setOrientation(LinearLayout.VERTICAL);
         form.setPadding(dp(22), dp(12), dp(22), dp(8));
-        EditText title = input(form, "任务名称", source.getTitle(), false);
-        EditText description = input(form, "描述", source.getDescription(), false);
-        EditText category = input(form, "类别：Study / Work / Life", source.getCategory(), false);
-        EditText type = input(form, "任务类型", source.getTaskType(), false);
-        EditText estimate = input(form, "预估分钟数", String.valueOf(source.getEstimatedDuration()), true);
-        EditText difficulty = input(form, "难度 1–5", String.valueOf(source.getDifficulty()), true);
-        EditText importance = input(form, "重要度 1–5", String.valueOf(source.getImportance()), true);
+        EditText title = input(form, "Task name", source.getTitle(), false);
+        EditText description = input(form, "Description", source.getDescription(), false);
+        EditText category = input(form, "Category: Study / Work / Life", source.getCategory(), false);
+        EditText type = input(form, "Task type", source.getTaskType(), false);
+        EditText estimate = input(form, "Estimated minutes", String.valueOf(source.getEstimatedDuration()), true);
+        EditText difficulty = input(form, "Difficulty 1–5", String.valueOf(source.getDifficulty()), true);
+        EditText importance = input(form, "Importance 1–5", String.valueOf(source.getImportance()), true);
         String deadlineValue = source.getDeadline() > 0
                 ? new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(new Date(source.getDeadline())) : "";
-        EditText deadline = input(form, "截止时间 yyyy-MM-dd HH:mm；留空为无", deadlineValue, false);
+        EditText deadline = input(form, "Deadline yyyy-MM-dd HH:mm · leave empty for none", deadlineValue, false);
         ScrollView scroll = new ScrollView(this);
         scroll.addView(form);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("编辑任务信息")
-                .setView(scroll).setNegativeButton("取消", null)
-                .setPositiveButton("保存", null).create();
+        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Edit task")
+                .setView(scroll).setNegativeButton("Cancel", null)
+                .setPositiveButton("Save", null).create();
         dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
             try {
                 int minutes = Integer.parseInt(estimate.getText().toString().trim());
@@ -784,7 +786,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 if (newTitle.isEmpty() || minutes <= 0 || difficultyValue < 1 || difficultyValue > 5
                         || importanceValue < 1 || importanceValue > 5
                         || !("Study".equals(newCategory) || "Work".equals(newCategory) || "Life".equals(newCategory))) {
-                    throw new IllegalArgumentException("请填写名称、正数时长、1–5 的难度与重要度，以及 Study / Work / Life 类别");
+                    throw new IllegalArgumentException("Enter a name, a positive duration, difficulty and importance from 1 to 5, and a Study / Work / Life category.");
                 }
                 long due = 0;
                 String dueText = deadline.getText().toString().trim();
@@ -796,7 +798,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                     due = parsed.getTime();
                 }
                 for (ScheduleItem item : schedule) if (item.getTaskId() == source.getTaskId() && due > 0 && item.getEndTime() > due) {
-                    throw new IllegalArgumentException("截止时间不能早于已安排的任务时段");
+                    throw new IllegalArgumentException("The deadline cannot be earlier than the planned slots.");
                 }
                 Task updated = new Task();
                 updated.setTaskId(source.getTaskId()); updated.setTitle(newTitle);
@@ -811,7 +813,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 } else {
                     RepositoryProvider.getTaskRepository().updateTask(updated, new TaskRepository.Callback<Integer>() {
                         @Override public void onSuccess(Integer rows) {
-                            if (rows == null || rows == 0) { showEditError("任务未找到，未保存"); return; }
+                            if (rows == null || rows == 0) { showEditError("Task not found; nothing was saved."); return; }
                             dialog.dismiss();
                             AutoScheduler.regenerateToday(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
                                 @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) loadData(); }
@@ -822,13 +824,13 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                                 }
                             });
                         }
-                        @Override public void onError(Exception error) { showEditError("保存失败：" + error.getMessage()); }
+                        @Override public void onError(Exception error) { showEditError("Could not save: " + error.getMessage()); }
                     });
                 }
             } catch (NumberFormatException error) {
-                showEditError("分钟数、难度和重要度必须是数字");
+                showEditError("Minutes, difficulty and importance must be numbers.");
             } catch (ParseException error) {
-                showEditError("截止时间格式应为 yyyy-MM-dd HH:mm");
+                showEditError("Use yyyy-MM-dd HH:mm for the deadline.");
             } catch (IllegalArgumentException error) {
                 showEditError(error.getMessage());
             }
@@ -850,22 +852,22 @@ public class SchedulePreviewActivity extends AppCompatActivity {
 
     private void editSessionTimeTyped(Task task, ScheduleItem item) {
         LinearLayout body = panel(WHITE);
-        body.addView(label("调整安排时间", 21, INK, true));
+        body.addView(label("Adjust time slot", 21, INK, true));
         spacerIn(body, 7);
-        body.addView(label("直接输入 24 小时制时间，保存后将固定这一时段。", 13, MUTED, false));
+        body.addView(label("Type 24-hour times. Saving locks this slot so re-planning keeps it.", 13, MUTED, false));
         spacerIn(body, 18);
-        EditText startField = timeInput("开始时间 HH:mm", clock(item.getStartTime()));
-        EditText endField = timeInput("结束时间 HH:mm", clock(item.getEndTime()));
-        body.addView(label("开始时间", 12, MUTED, false));
+        EditText startField = timeInput("Start HH:mm", clock(item.getStartTime()));
+        EditText endField = timeInput("End HH:mm", clock(item.getEndTime()));
+        body.addView(label("Start", 12, MUTED, false));
         spacerIn(body, 6);
         body.addView(startField, new LinearLayout.LayoutParams(-1, dp(50)));
         spacerIn(body, 14);
-        body.addView(label("结束时间", 12, MUTED, false));
+        body.addView(label("End", 12, MUTED, false));
         spacerIn(body, 6);
         body.addView(endField, new LinearLayout.LayoutParams(-1, dp(50)));
         spacerIn(body, 19);
         AlertDialog dialog = new AlertDialog.Builder(this).setView(body).create();
-        TextView save = detailAction("保存时间", MINT);
+        TextView save = detailAction("Save time", MINT);
         body.addView(save);
         save.setOnClickListener(v -> {
             int startMinute, endMinute;
@@ -875,17 +877,17 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             } catch (IllegalArgumentException error) { showEditError(error.getMessage()); return; }
             long start = atDayTime(startMinute / 60, startMinute % 60);
             long end = atDayTime(endMinute / 60, endMinute % 60);
-            if (start >= end) { showEditError("结束时间必须晚于开始时间"); return; }
+            if (start >= end) { showEditError("The end time must be after the start time."); return; }
             if (task.getDeadline() > 0 && end > task.getDeadline()) {
-                showEditError("结束时间不能晚于任务截止时间"); return;
+                showEditError("The end time cannot be after the task deadline."); return;
             }
             int lockedMinutes = ScheduleEditRules.lockedMinutes(schedule, item, start, end);
             int plannedMinutes = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
             if (plannedMinutes > 0 && lockedMinutes > plannedMinutes) {
-                showEditError("手动固定的总时间不能超过任务预计时长"); return;
+                showEditError("Locked time cannot exceed the task's expected duration."); return;
             }
             if (ScheduleEditRules.overlaps(schedule, item, start, end)) {
-                showEditError("这个时间与另一项日程重叠"); return;
+                showEditError("This time overlaps another planned slot."); return;
             }
             if (item.getScheduleId() <= 0) {
                 item.setStartTime(start); item.setEndTime(end); item.setManuallyEdited(true);
@@ -917,13 +919,13 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private int parseClockMinute(String text, boolean allowEndOfDay) {
         if (allowEndOfDay && "24:00".equals(text)) return 24 * 60;
         if (!text.matches("(?:[01]\\d|2[0-3]):[0-5]\\d")) {
-            throw new IllegalArgumentException("时间请按 HH:mm 输入，例如 09:30");
+            throw new IllegalArgumentException("Use HH:mm, for example 09:30.");
         }
         return Integer.parseInt(text.substring(0, 2)) * 60 + Integer.parseInt(text.substring(3, 5));
     }
 
     private void showEditError(String message) {
-        new AlertDialog.Builder(this).setMessage(message).setPositiveButton("好的", null).show();
+        new AlertDialog.Builder(this).setMessage(message).setPositiveButton("OK", null).show();
     }
 
     private void openTimer(Task task) {

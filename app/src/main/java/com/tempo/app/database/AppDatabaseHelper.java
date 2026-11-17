@@ -13,7 +13,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
     }
 
-    // 开启外键约束（SQLite 默认不强制，必须显式打开）
+    // Enable foreign keys (SQLite does not enforce them unless asked)
     @Override
     public void onConfigure(SQLiteDatabase db) {
         super.onConfigure(db);
@@ -23,7 +23,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onCreate(SQLiteDatabase db) {
 
-        // 1. tasks 表
+        // 1. tasks
         db.execSQL(
                 "CREATE TABLE tasks (" +
                         "task_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -41,7 +41,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                         ")"
         );
 
-        // 2. task_feedback 表
+        // 2. task_feedback
         db.execSQL(
                 "CREATE TABLE task_feedback (" +
                         "feedback_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -55,7 +55,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                         ")"
         );
 
-        // 3. user_profile 表
+        // 3. user_profile
         db.execSQL(
                 "CREATE TABLE user_profile (" +
                         "profile_id INTEGER PRIMARY KEY AUTOINCREMENT, " +
@@ -71,7 +71,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                         ")"
         );
 
-        // 4. schedule_items 表
+        // 4. schedule_items
         db.execSQL(
                 "CREATE TABLE schedule_items (" +
                         "schedule_id INTEGER PRIMARY KEY AUTOINCREMENT, " +

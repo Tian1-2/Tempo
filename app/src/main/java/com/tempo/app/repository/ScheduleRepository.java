@@ -21,7 +21,7 @@ public class ScheduleRepository {
         this.scheduleDao = scheduleDao;
     }
 
-    // 复用 TaskRepository.Callback
+    // Reuses TaskRepository.Callback
     public void saveSchedule(List<ScheduleItem> items,
                              TaskRepository.Callback<Void> callback) {
         executor.execute(() -> {
@@ -70,7 +70,7 @@ public class ScheduleRepository {
         });
     }
 
-    // 给 C 用的同步版本（C 在后台线程调）
+    // Synchronous versions for the scheduler (called on a background thread)
     public void saveScheduleSync(List<ScheduleItem> items) {
         scheduleDao.insertScheduleItems(items);
     }

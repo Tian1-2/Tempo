@@ -25,12 +25,17 @@ import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import com.tempo.app.learning.LearningRepository;
 import com.tempo.app.learning.LearningStore;
-import com.tempo.app.insights.InsightsIcon;
+import com.tempo.app.home.DailyReview;
+import com.tempo.app.model.Task;
+import com.tempo.app.repository.RepositoryProvider;
+import com.tempo.app.ui.Ui;
 import com.tempo.app.repository.TaskRepository;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 
 /** Corrections update the original record; task outcomes and frozen predictions remain unchanged. */
 public final class SessionHistoryActivity extends AppCompatActivity {
@@ -48,11 +53,12 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         super.onCreate(state);
         restoreEdit=state;
         navy=getColor(R.color.insights_navy);muted=getColor(R.color.insights_muted);blue=getColor(R.color.insights_blue);ice=getColor(R.color.insights_ice);
+        RepositoryProvider.init(this);
         learning=new LearningRepository(this);
         WindowCompat.setDecorFitsSystemWindows(getWindow(),false);
-        getWindow().setStatusBarColor(Color.TRANSPARENT);getWindow().setNavigationBarColor(Color.WHITE);
-        ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(Color.WHITE);scroll.setFillViewport(true);
-        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(20),dp(12),dp(20),dp(28));content.setClipToPadding(false);
+        getWindow().setStatusBarColor(Color.TRANSPARENT);getWindow().setNavigationBarColor(Ui.BG);
+        ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(Ui.BG);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);
+        content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(20),dp(8),dp(20),dp(28));content.setClipToPadding(false);
         scroll.addView(content);setContentView(scroll);
         WindowCompat.getInsetsController(getWindow(),scroll).setAppearanceLightStatusBars(true);
         WindowCompat.getInsetsController(getWindow(),scroll).setAppearanceLightNavigationBars(true);
@@ -64,42 +70,165 @@ public final class SessionHistoryActivity extends AppCompatActivity {
     }
     private void header() {
         content.removeAllViews();
-        LinearLayout navigation=new LinearLayout(this);navigation.setOrientation(LinearLayout.HORIZONTAL);navigation.setGravity(Gravity.CENTER_VERTICAL);
-        InsightsIcon back=new InsightsIcon(this,InsightsIcon.Kind.BACK,muted);
-        back.setContentDescription("Back to insights");back.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);back.setFocusable(true);
-        back.setBackground(new RippleDrawable(ColorStateList.valueOf(ice),null,shape(Color.WHITE)));
-        back.setOnClickListener(v->{if(!saving)finish();});navigation.addView(back,new LinearLayout.LayoutParams(dp(48),dp(48)));
-        navigation.addView(text("Insights",14,muted,true));
-        LinearLayout.LayoutParams navigationParams=new LinearLayout.LayoutParams(-1,-2);
-        navigationParams.leftMargin=-dp(18);
-        content.addView(navigation,navigationParams);gap(content,8);
-        content.addView(text("Activity history",30,navy,true));gap(content,8);
-        content.addView(text("Latest 200 records · all dates\nTap a record to correct its time or rating.",14,muted,false));gap(content,20);
+        content.addView(Ui.backRow(this, "Back", v -> { if (!saving) finish(); }));
+        Ui.space(content, 6);
+        content.addView(Ui.title(this, "History"));
+        Ui.space(content, 4);
+        content.addView(Ui.text(this, "Every focus session and logged activity. Tap one to correct its time or rating.", 14, Ui.MUTED, false));
+        Ui.space(content, 18);
     }
+
     private void load() {
-        header();content.addView(text("Reading your records…",14,muted,false));
+        header();
+        content.addView(Ui.text(this, "Reading your records…", 14, Ui.MUTED, false));
         learning.records(new TaskRepository.Callback<List<LearningStore.Record>>() {
             public void onSuccess(List<LearningStore.Record> rows) {
-                header();if(rows.isEmpty())content.addView(text("No activity saved yet. Log an activity or save a focus session to begin.",15,muted,false));
-                SimpleDateFormat date=new SimpleDateFormat("MMM d, yyyy · HH:mm",Locale.ENGLISH);
-                for(LearningStore.Record row:rows) {
-                    LinearLayout card=new LinearLayout(SessionHistoryActivity.this);card.setOrientation(LinearLayout.VERTICAL);
-                    card.setPadding(dp(18),dp(18),dp(18),dp(18));card.setBackground(shape(ice));
-                    card.addView(text(row.title,17,navy,true));gap(card,6);
-                    card.addView(text((row.minutes==null?"Time not recorded":row.minutes+" min recorded")+" · "+("COMPLETED".equals(row.outcome)?"Task completed":"Partial progress"),14,navy,false));gap(card,6);
-                    card.addView(text("Saved "+date.format(new Date(row.savedAt))+"\n"+sourceLabel(row.source)
-                            +(row.difficulty>0?" · Difficulty "+row.difficulty+"/5":" · Unrated"),12,muted,false));
-                    TextView edit=action("Edit record");edit.setOnClickListener(v->edit(row));card.addView(edit);
-                    content.addView(card);gap(content,12);
-                }
-                if(restoreEdit!=null && restoreEdit.containsKey("editId")) {
-                    for(LearningStore.Record row:rows) if(row.id==restoreEdit.getLong("editId") && row.revision==restoreEdit.getInt("editRevision")) {edit(row);break;}
-                }
-                restoreEdit=null;
+                // Categories colour each record; read them once, then render.
+                RepositoryProvider.getTaskRepository().getAllTasks(new TaskRepository.Callback<List<Task>>() {
+                    public void onSuccess(List<Task> tasks) { render(rows, tasks); }
+                    public void onError(Exception e) { render(rows, java.util.Collections.<Task>emptyList()); }
+                });
             }
-            public void onError(Exception e) {header();content.addView(text("Could not load your records.",15,muted,false));TextView retry=action("Try again");retry.setOnClickListener(v->load());content.addView(retry);}
+            public void onError(Exception e) {
+                header();
+                LinearLayout panel = Ui.panel(SessionHistoryActivity.this, Ui.WARM_SOFT);
+                panel.addView(Ui.text(SessionHistoryActivity.this, "Could not load your records.", 15, Ui.INK, true));
+                content.addView(panel);
+                Ui.space(content, 12);
+                TextView retry = Ui.secondary(SessionHistoryActivity.this, "Try again");
+                retry.setOnClickListener(v -> load());
+                content.addView(retry);
+            }
         });
     }
+
+    private void render(List<LearningStore.Record> rows, List<Task> tasks) {
+        if (isFinishing()) return;
+        header();
+        Map<Integer, String> category = new HashMap<>();
+        for (Task t : tasks) category.put(t.getTaskId(), t.getCategory());
+        if (rows.isEmpty()) {
+            LinearLayout empty = Ui.card(this);
+            empty.setGravity(Gravity.CENTER_HORIZONTAL);
+            empty.setPadding(dp(20), dp(28), dp(20), dp(28));
+            TextView title = Ui.text(this, "No activity yet", 17, Ui.INK, true);
+            empty.addView(title);
+            Ui.space(empty, 6);
+            TextView body = Ui.text(this, "Finish a focus session or log an activity in Insights, and it will appear here.", 14, Ui.MUTED, false);
+            body.setGravity(Gravity.CENTER);
+            empty.addView(body);
+            content.addView(empty);
+        } else {
+            summary(rows);
+            Ui.space(content, 22);
+            SimpleDateFormat dayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+            String today = dayKey.format(new Date());
+            String yesterday = dayKey.format(new Date(System.currentTimeMillis() - 86_400_000L));
+            SimpleDateFormat dayLabel = new SimpleDateFormat("EEE, MMM d", Locale.US);
+            SimpleDateFormat clock = new SimpleDateFormat("HH:mm", Locale.US);
+            String currentDay = null;
+            LinearLayout dayCard = null;
+            for (int i = 0; i < rows.size(); i++) {
+                LearningStore.Record row = rows.get(i);
+                String key = dayKey.format(new Date(row.savedAt));
+                if (!key.equals(currentDay)) {
+                    currentDay = key;
+                    int dayMinutes = 0;
+                    for (LearningStore.Record r : rows) {
+                        if (r.minutes != null && key.equals(dayKey.format(new Date(r.savedAt)))) dayMinutes += r.minutes;
+                    }
+                    if (dayCard != null) Ui.space(content, 18);
+                    LinearLayout label = new LinearLayout(this);
+                    label.setGravity(Gravity.CENTER_VERTICAL);
+                    String name = key.equals(today) ? "Today" : key.equals(yesterday) ? "Yesterday" : dayLabel.format(new Date(row.savedAt));
+                    label.addView(Ui.eyebrow(this, name), new LinearLayout.LayoutParams(0, -2, 1));
+                    label.addView(Ui.text(this, dayMinutes > 0 ? DailyReview.formatMinutes(dayMinutes) : "", 12, Ui.MUTED, true));
+                    content.addView(label);
+                    Ui.space(content, 8);
+                    dayCard = Ui.card(this);
+                    dayCard.setPadding(dp(16), dp(4), dp(16), dp(4));
+                    content.addView(dayCard);
+                } else {
+                    dayCard.addView(Ui.divider(this));
+                }
+                dayCard.addView(recordRow(row, category.get(row.taskId), clock));
+            }
+        }
+        Ui.space(content, 24);
+        if (restoreEdit != null && restoreEdit.containsKey("editId")) {
+            for (LearningStore.Record row : rows) if (row.id == restoreEdit.getLong("editId") && row.revision == restoreEdit.getInt("editRevision")) { edit(row); break; }
+        }
+        restoreEdit = null;
+    }
+
+    private void summary(List<LearningStore.Record> rows) {
+        long weekStart = System.currentTimeMillis() - 7L * 86_400_000L;
+        int total = 0, week = 0, done = 0;
+        for (LearningStore.Record r : rows) {
+            if (r.minutes != null) { total += r.minutes; if (r.savedAt >= weekStart) week += r.minutes; }
+            if ("COMPLETED".equals(r.outcome)) done++;
+        }
+        LinearLayout card = Ui.card(this);
+        card.setOrientation(LinearLayout.HORIZONTAL);
+        card.setPadding(dp(8), dp(16), dp(8), dp(16));
+        card.addView(stat(String.valueOf(rows.size()), rows.size() == 1 ? "record" : "records"), new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(stat(DailyReview.formatMinutes(week), "last 7 days"), new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(stat(String.valueOf(done), done == 1 ? "task finished" : "tasks finished"), new LinearLayout.LayoutParams(0, -2, 1));
+        content.addView(card);
+    }
+
+    private View stat(String value, String label) {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.addView(Ui.text(this, value, 18, Ui.INK, true));
+        Ui.space(box, 2);
+        box.addView(Ui.text(this, label, 12, Ui.MUTED, false));
+        return box;
+    }
+
+    private View recordRow(LearningStore.Record row, String category, SimpleDateFormat clock) {
+        boolean completed = "COMPLETED".equals(row.outcome);
+        LinearLayout line = new LinearLayout(this);
+        line.setGravity(Gravity.CENTER_VERTICAL);
+        line.setPadding(0, dp(14), 0, dp(14));
+        line.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.MINT_SOFT), null, Ui.round(Color.WHITE, dp(12))));
+        line.setOnClickListener(v -> edit(row));
+
+        View dot = new View(this);
+        GradientDrawable dotShape = new GradientDrawable();
+        dotShape.setShape(GradientDrawable.OVAL);
+        dotShape.setColor(Ui.categoryColor(category));
+        dot.setBackground(dotShape);
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(10), dp(10));
+        dotParams.rightMargin = dp(12);
+        line.addView(dot, dotParams);
+
+        LinearLayout middle = new LinearLayout(this);
+        middle.setOrientation(LinearLayout.VERTICAL);
+        TextView title = Ui.text(this, row.title, 15, Ui.INK, true);
+        title.setSingleLine(true);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        middle.addView(title);
+        Ui.space(middle, 3);
+        String meta = clock.format(new Date(row.savedAt)) + " · " + sourceLabel(row.source)
+                + (row.difficulty > 0 ? " · Difficulty " + row.difficulty + "/5" : "");
+        middle.addView(Ui.text(this, meta, 12, Ui.MUTED, false));
+        line.addView(middle, new LinearLayout.LayoutParams(0, -2, 1));
+
+        LinearLayout right = new LinearLayout(this);
+        right.setOrientation(LinearLayout.VERTICAL);
+        right.setGravity(Gravity.END);
+        right.setPadding(dp(10), 0, 0, 0);
+        right.addView(Ui.text(this, row.minutes == null ? "No time" : DailyReview.formatMinutes(row.minutes), 15,
+                row.minutes == null ? Ui.MUTED : Ui.INK, true));
+        Ui.space(right, 4);
+        right.addView(Ui.chip(this, completed ? "Done" : "Partial", completed ? Ui.MINT_SOFT : Ui.WARM_SOFT,
+                completed ? Ui.GREEN : Ui.WARM));
+        line.addView(right);
+        return line;
+    }
+
     private String sourceLabel(String source) {
         switch(source) {case "TIMER":return "Focus timer";case "MANUAL":return "Manual entry";case "STATUS":return "Status only";case "BACKFILLED":return "Time added later";case "CORRECTED":case "ADJUSTED":return "Adjusted duration";default:return "Earlier record";}
     }

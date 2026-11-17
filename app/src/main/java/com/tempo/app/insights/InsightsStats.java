@@ -118,6 +118,7 @@ public final class InsightsStats {
     private static String categoryName(String value) {
         if (value == null || value.trim().isEmpty()) return "Uncategorized";
         value = value.trim();
+        // Legacy rows may store Chinese category names; keep these aliases.
         if (value.equalsIgnoreCase("study") || value.equals("学习")) return "Study";
         if (value.equalsIgnoreCase("work") || value.equals("工作")) return "Work";
         if (value.equalsIgnoreCase("life") || value.equals("生活")) return "Life";

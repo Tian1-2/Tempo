@@ -2,7 +2,7 @@ package com.tempo.app.model;
 
 public class UserProfile {
 
-    private int profileId;           // 第一版固定 1
+    private int profileId;           // always 1 (single user)
 
     private String wakeTime;         // "07:00"
     private String sleepTime;        // "23:30"
@@ -11,16 +11,16 @@ public class UserProfile {
     private String lunchTime;        // "12:30"
     private String dinnerTime;       // "18:30"
 
-    private int focusDuration;       // 单次专注时长（分钟），如 25
-    private int breakDuration;       // 休息时长（分钟），如 5
-    private int dailyCapacity;       // 每日可用时间（分钟），如 240
+    private int focusDuration;       // focus block length in minutes, e.g. 25
+    private int breakDuration;       // break length in minutes, e.g. 5
+    private int dailyCapacity;       // daily task time in minutes, e.g. 240
 
-    private String preferredStartTime; // 偏好开始工作时间，如 "09:00"
+    private String preferredStartTime; // preferred focus start, e.g. "09:00"
 
     public UserProfile() {
     }
 
-    // ---- Getter / Setter（Generate 自动生成）----
+    // ---- Getters / setters ----
 
     public int getProfileId() { return profileId; }
     public void setProfileId(int profileId) { this.profileId = profileId; }

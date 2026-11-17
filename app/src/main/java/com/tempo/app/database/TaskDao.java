@@ -18,7 +18,7 @@ public class TaskDao {
         this.dbHelper = dbHelper;
     }
 
-    // ---------- 私有工具：Cursor → Task（唯一转换入口）----------
+    // ---------- Cursor -> Task (the single conversion point) ----------
     private Task cursorToTask(Cursor cursor) {
         Task task = new Task();
         task.setTaskId(cursor.getInt(cursor.getColumnIndexOrThrow("task_id")));
@@ -57,7 +57,7 @@ public class TaskDao {
         return id;
     }
 
-    // ---------- READ: 全部 ----------
+    // ---------- READ: all ----------
     public List<Task> getAllTasks() {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
@@ -70,7 +70,7 @@ public class TaskDao {
         return tasks;
     }
 
-    // ---------- READ: 单条 ----------
+    // ---------- READ: one ----------
     public Task getTaskById(int taskId) {
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         try (Cursor cursor = db.query("tasks", null,
@@ -83,7 +83,7 @@ public class TaskDao {
         return null;
     }
 
-    // ---------- READ: 待完成任务（C 模块最常用）----------
+    // ---------- READ: pending and in-progress tasks (used by the scheduler) ----------
     public List<Task> getPendingTasks() {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
@@ -111,7 +111,7 @@ public class TaskDao {
         values.put("importance", task.getImportance());
         values.put("deadline", task.getDeadline());
         values.put("status", task.getStatus());
-        // 注意：created_at 不在 update 里，创建时间不该被改
+        // created_at is intentionally not updated
         return db.update("tasks", values,
                 "task_id = ?", new String[]{String.valueOf(task.getTaskId())});
     }

@@ -74,7 +74,7 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         getWindow().setNavigationBarColor(Build.VERSION.SDK_INT >= 26 ? Color.TRANSPARENT : NAVY);
         if (Build.VERSION.SDK_INT >= 29) getWindow().setNavigationBarContrastEnforced(false);
         ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(true); scroll.setBackgroundColor(Color.WHITE);
+        scroll.setFillViewport(true); scroll.setBackgroundColor(getColor(R.color.insights_white));
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(20), dp(12), dp(20), dp(28)); page.setClipToPadding(false); scroll.addView(page); setContentView(scroll);
         WindowCompat.getInsetsController(getWindow(), scroll).setAppearanceLightStatusBars(true);
@@ -105,7 +105,7 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         page.addView(text(manual?"Log activity":"Session review",30,NAVY,true)); gap(page,8);
         page.addView(text(getIntent().getStringExtra("title"),17,MUTED,false)); gap(page,20);
         LinearLayout timeCard = card();
-        timeCard.addView(text("THIS SESSION",12,BLUE,true)); gap(timeCard,8);
+        TextView sessionLabel=text("THIS SESSION",11,BLUE,true);sessionLabel.setLetterSpacing(0.14f);timeCard.addView(sessionLabel); gap(timeCard,8);
         minutes = number(manual?"":String.valueOf(getIntent().getIntExtra("minutes",1)), "Minutes spent this session");
         timeCard.addView(minutes);
         timeCard.addView(text(manual?"Minutes · enter the time spent on this activity":"Minutes · adjust if needed",13,MUTED,false));
@@ -221,16 +221,18 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
     private TextView text(String value,int size,int color,boolean bold){TextView t=new TextView(this);t.setText(value);t.setTextSize(size);t.setTextColor(color);t.setTypeface(Typeface.create(bold?"sans-serif-medium":"sans-serif",Typeface.NORMAL));t.setLineSpacing(dp(3),1);return t;}
     private EditText number(String value,String hint){EditText e=new EditText(this);e.setText(value);e.setHint(hint);e.setContentDescription(hint);e.setInputType(InputType.TYPE_CLASS_NUMBER);e.setTextColor(NAVY);e.setTextSize(17);e.setMinHeight(dp(52));return e;}
     private TextView button(String title,int style){
-        TextView t=text(title,15,style==PRIMARY?BLUE:MUTED,style==PRIMARY);
-        t.setGravity(Gravity.CENTER); t.setMinHeight(dp(style==TERTIARY?48:52));
+        // App-wide buttons: dark primary, white outlined secondary, quiet tertiary.
+        TextView t=text(title,15,style==PRIMARY?Color.WHITE:style==SECONDARY?NAVY:MUTED,style!=TERTIARY);
+        t.setGravity(Gravity.CENTER); t.setMinHeight(dp(style==TERTIARY?48:54));
         t.setPadding(dp(16),dp(12),dp(16),dp(12)); t.setFocusable(true);
-        GradientDrawable background=shape(style==PRIMARY?getColor(R.color.insights_ice):Color.WHITE);
+        GradientDrawable background=shape(style==PRIMARY?NAVY:style==SECONDARY?Color.WHITE:Color.TRANSPARENT);
         if(style==SECONDARY) background.setStroke(dp(1),getColor(R.color.insights_line));
         t.setBackground(new RippleDrawable(ColorStateList.valueOf(getColor(R.color.insights_ice)),background,null));
         return t;
     }
-    private GradientDrawable shape(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(18));return d;}
-    private LinearLayout card(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(20),dp(20),dp(20),dp(20));l.setBackground(shape(getColor(R.color.insights_ice)));return l;}
+    private GradientDrawable shape(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(16));return d;}
+    private LinearLayout card(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(20),dp(20),dp(20),dp(20));
+        GradientDrawable d=shape(Color.WHITE);d.setCornerRadius(dp(22));l.setBackground(d);l.setElevation(dp(2));return l;}
     private void gap(LinearLayout l,int h){l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(h)));}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
 }

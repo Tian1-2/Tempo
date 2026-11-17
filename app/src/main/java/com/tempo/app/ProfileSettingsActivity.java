@@ -26,6 +26,8 @@ import android.widget.Toast;
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.tempo.app.home.DailyReview;
+import com.tempo.app.home.SampleData;
+import com.tempo.app.ui.Ui;
 import com.tempo.app.model.UserProfile;
 import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
@@ -179,6 +181,18 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         addField(focusCard, rest, "Break", "Rest between focus blocks", "min");
         addField(focusCard, capacity, "Daily task time", "Most Tempo will plan per day", "min");
         body.addView(focusCard);
+
+        section("DEMO");
+        LinearLayout demo = card();
+        demo.setPadding(dp(16), dp(16), dp(16), dp(16));
+        demo.addView(text("Sample data", 15, INK, true));
+        Ui.space(demo, 4);
+        demo.addView(text("Fill an empty app with a week of tasks, focus sessions and today's plan, to see every page with data.", 12, MUTED, false));
+        Ui.space(demo, 12);
+        TextView sample = Ui.secondary(this, "Load sample data");
+        sample.setOnClickListener(v -> confirmSampleData());
+        demo.addView(sample);
+        body.addView(demo);
 
         save = text("Save", 16, Color.WHITE, true);
         save.setGravity(Gravity.CENTER);
@@ -359,6 +373,40 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 save.setText("Save");
                 Toast.makeText(ProfileSettingsActivity.this, "Could not save: " + error.getMessage(), Toast.LENGTH_LONG).show();
             }
+        });
+    }
+
+    private void confirmSampleData() {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle("Load sample data?")
+                .setMessage("Adds a week of example tasks and focus sessions, then plans today. This only works while the app has no tasks.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Load", (d, w) -> loadSampleData())
+                .show();
+    }
+
+    private void loadSampleData() {
+        save.setEnabled(false);
+        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+            String error = null;
+            try {
+                SampleData.seed();
+            } catch (Exception e) {
+                error = e.getMessage();
+            }
+            String failure = error;
+            runOnUiThread(() -> {
+                if (isFinishing()) return;
+                if (failure != null) {
+                    save.setEnabled(true);
+                    Toast.makeText(this, failure, Toast.LENGTH_LONG).show();
+                    return;
+                }
+                AutoScheduler.regenerateToday(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
+                    @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Sample data loaded"); }
+                    @Override public void onFailed(String message) { done("Sample data loaded"); }
+                });
+            });
         });
     }
 

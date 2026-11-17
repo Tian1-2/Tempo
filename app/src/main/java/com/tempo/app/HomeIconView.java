@@ -14,7 +14,7 @@ public final class HomeIconView extends View {
 
     public HomeIconView(Context context) {
         super(context);
-        setContentDescription("进入主页");
+        setContentDescription("Go to home");
         paint.setColor(Color.rgb(105, 120, 119));
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(2));

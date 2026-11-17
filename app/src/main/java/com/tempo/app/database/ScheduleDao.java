@@ -41,7 +41,7 @@ public class ScheduleDao {
         return db.insert("schedule_items", null, values);
     }
 
-    // 批量插入（C 生成排程后调用），放在一个事务里，失败整体回滚
+    // Batch insert (used after C generates a plan) in one transaction; all-or-nothing
     public void insertScheduleItems(List<ScheduleItem> items) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         db.beginTransaction();
@@ -147,7 +147,7 @@ public class ScheduleDao {
         }
     }
 
-    // 重排前清掉某任务的所有旧排程
+    // Removes every slot of a task before re-planning it
     public int deleteScheduleByTaskId(int taskId) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         return db.delete("schedule_items", "task_id = ?",

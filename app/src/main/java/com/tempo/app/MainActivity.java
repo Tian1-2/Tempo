@@ -23,10 +23,10 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        // 1. 先初始化 Provider（必须在使用 Repository 之前）
+        // 1. Initialise the provider before using any repository
         RepositoryProvider.init(this);
 
-        // 2. 原来的布局代码保持不动
+        // 2. Original layout code, unchanged
         EdgeToEdge.enable(this);
         setContentView(R.layout.activity_main);
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main), (v, insets) -> {
@@ -35,21 +35,21 @@ public class MainActivity extends AppCompatActivity {
             return insets;
         });
 
-        // 3. 数据库链路测试
+        // 3. Database round-trip test
         runDatabaseTest();
     }
 
     private void runDatabaseTest() {
         TaskRepository repo = RepositoryProvider.getTaskRepository();
 
-        // 3.1 先插一条测试任务
+        // 3.1 Insert a test task
         Task test = new Task(
                 "Test Task",
                 "Study",
                 60,                          // estimatedDuration
                 3,                           // difficulty
                 4,                           // importance
-                System.currentTimeMillis() + 86400000L  // 明天
+                System.currentTimeMillis() + 86400000L  // tomorrow
         );
 
         repo.addTask(test, new TaskRepository.Callback<Long>() {
@@ -57,7 +57,7 @@ public class MainActivity extends AppCompatActivity {
             public void onSuccess(Long id) {
                 Log.d(TAG, "inserted id = " + id);
 
-                // 3.2 插入成功后立刻查 pending 列表
+                // 3.2 Then read the pending list
                 repo.getPendingTasks(new TaskRepository.Callback<List<Task>>() {
                     @Override
                     public void onSuccess(List<Task> tasks) {

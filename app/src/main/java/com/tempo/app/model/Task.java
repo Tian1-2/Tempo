@@ -2,29 +2,29 @@ package com.tempo.app.model;
 
 public class Task {
 
-    private int taskId;              // 主键，数据库自增
-    private String title;            // 任务名称
-    private String description;      // 任务描述
+    private int taskId;              // primary key, auto-increment
+    private String title;            // task name
+    private String description;      // description
 
     private String category;         // Study / Work / Life
-    private String taskType;         // Assignment / Revision 等
+    private String taskType;         // e.g. Assignment / Revision
 
-    private int estimatedDuration;   // 用户预估时间（分钟）
-    private int predictedDuration;   // 系统预测时间（分钟）—— D 模块用
+    private int estimatedDuration;   // user estimate (min)
+    private int predictedDuration;   // learned prediction (min), written by D
 
-    private int difficulty;          // 用户预估难度 1–5
-    private int importance;          // 重要程度 1–5
+    private int difficulty;          // expected difficulty 1-5
+    private int importance;          // importance 1-5
 
-    private long deadline;           // 截止时间，Unix timestamp（毫秒）
+    private long deadline;           // deadline, Unix ms (0 = none)
     private String status;           // PENDING / IN_PROGRESS / COMPLETED
 
-    private long createdAt;          // 创建时间（毫秒）
+    private long createdAt;          // created at (ms)
 
-    // 无参构造：DAO 从 Cursor 建对象时用这个，再逐个 set
+    // Empty constructor: used by the DAO when reading a cursor
     public Task() {
     }
 
-    // 有参构造：方便快速创建新任务（status 和 createdAt 自动填好）
+    // Convenience constructor for new tasks (status and createdAt filled in)
     public Task(String title, String category,
                 int estimatedDuration, int difficulty,
                 int importance, long deadline) {
@@ -39,8 +39,7 @@ public class Task {
     }
 
     // ---- Getter / Setter ----
-    // 在类内右键 → Generate → Getter and Setter → 全选 → OK 自动生成
-    // 下面是生成后的样子，供你对照
+    // Getters and setters
 
     public int getTaskId() { return taskId; }
     public void setTaskId(int taskId) { this.taskId = taskId; }

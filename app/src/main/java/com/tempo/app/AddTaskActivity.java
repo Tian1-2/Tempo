@@ -75,10 +75,10 @@ public class AddTaskActivity extends AppCompatActivity {
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0, dp(14), dp(20), dp(4));
-        BackChevronView back = new BackChevronView(this, "返回日程");
+        BackChevronView back = new BackChevronView(this, "Back");
         back.setOnClickListener(v -> finish());
         header.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView heading = text(editingTaskId > 0 ? "编辑任务" : "新建任务", 14, MUTED, false);
+        TextView heading = text("Back", 14, MUTED, false);
         heading.setGravity(Gravity.CENTER_VERTICAL);
         heading.setIncludeFontPadding(false);
         LinearLayout.LayoutParams headingParams = new LinearLayout.LayoutParams(0, dp(48), 1);
@@ -94,27 +94,27 @@ public class AddTaskActivity extends AppCompatActivity {
         scroll.addView(body);
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
-        TextView date = text(editingTaskId > 0 ? "任务信息" : "第 1 步 · 填写任务条件",
+        TextView date = text(editingTaskId > 0 ? "TASK DETAILS" : "STEP 1 · DESCRIBE THE TASK",
                 13, Color.rgb(52, 126, 91), true);
         body.addView(date);
         space(body, 8);
-        body.addView(text(editingTaskId > 0 ? "调整任务条件" : "先告诉我们任务是什么", 26, INK, true));
+        body.addView(text(editingTaskId > 0 ? "Edit task" : "New task", 26, INK, true));
         space(body, 6);
-        body.addView(text("排程会参考截止时间、重要程度和难度安排合适的时段。", 13, MUTED, false));
+        body.addView(text("Tempo uses the deadline, importance and difficulty to find the right time.", 13, MUTED, false));
         space(body, 26);
 
-        section(body, "任务内容");
+        section(body, "WHAT");
         LinearLayout contentCard = card();
-        title = edit("任务名称", "", false);
+        title = edit("Task name", "", false);
         title.setTextSize(18);
         contentCard.addView(title, new LinearLayout.LayoutParams(-1, dp(52)));
         rule(contentCard);
-        description = edit("补充描述（可选）", "", false);
+        description = edit("Notes (optional)", "", false);
         contentCard.addView(description, new LinearLayout.LayoutParams(-1, dp(48)));
         body.addView(contentCard);
         space(body, 20);
 
-        section(body, "任务类别");
+        section(body, "CATEGORY");
         categoryRow = new LinearLayout(this);
         categoryRow.setOrientation(LinearLayout.HORIZONTAL);
         body.addView(categoryRow);
@@ -126,50 +126,51 @@ public class AddTaskActivity extends AppCompatActivity {
         body.addView(text("Helps Tempo compare tasks of the same type.",12,MUTED,false));
         space(body, 20);
 
-        section(body, "完成条件");
+        section(body, "TIME");
         LinearLayout timeCard = card();
         LinearLayout estimateRow = new LinearLayout(this);
         estimateRow.setGravity(Gravity.CENTER_VERTICAL);
-        estimateRow.addView(text("预计任务时长", 14, MUTED, false), new LinearLayout.LayoutParams(0, -2, 1));
-        estimate = edit("分钟", "60", true);
+        estimateRow.addView(text("Estimated duration", 14, MUTED, false), new LinearLayout.LayoutParams(0, -2, 1));
+        estimate = edit("min", "60", true);
         estimate.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         estimateRow.addView(estimate, new LinearLayout.LayoutParams(dp(76), dp(48)));
-        estimateRow.addView(text("分钟", 14, MUTED, false));
+        estimateRow.addView(text("min", 14, MUTED, false));
         timeCard.addView(estimateRow);
         rule(timeCard);
-        TextView dueLabel = text("截止时间", 14, MUTED, false);
+        TextView dueLabel = text("Deadline", 14, MUTED, false);
         dueLabel.setPadding(0, dp(13), 0, dp(4));
         timeCard.addView(dueLabel);
-        deadline = edit("例如 2026-11-20 23:59（可留空）", "", false);
+        deadline = edit("e.g. 2026-11-20 23:59 (optional)", "", false);
         deadline.setInputType(InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_NORMAL);
         timeCard.addView(deadline, new LinearLayout.LayoutParams(-1, dp(48)));
         body.addView(timeCard);
         space(body, 20);
 
-        section(body, "排程参考");
+        section(body, "PRIORITY");
         LinearLayout weightCard = card();
-        weightCard.addView(text("难度", 14, MUTED, false));
-        weightCard.addView(text("完成它有多费力；难度高的任务优先匹配高效时段。", 12, MUTED, false));
+        weightCard.addView(text("Difficulty", 14, MUTED, false));
+        weightCard.addView(text("How demanding it is. Harder tasks go into your best focus time.", 12, MUTED, false));
         space(weightCard, 8);
         difficultyRow = new LinearLayout(this); weightCard.addView(difficultyRow);
         space(weightCard, 17);
-        weightCard.addView(text("重要程度", 14, MUTED, false));
-        weightCard.addView(text("它对你的目标有多重要；会与截止紧迫度一起决定优先级。", 12, MUTED, false));
+        weightCard.addView(text("Importance", 14, MUTED, false));
+        weightCard.addView(text("How much it matters to your goals. Together with the deadline it sets the priority.", 12, MUTED, false));
         space(weightCard, 8);
         importanceRow = new LinearLayout(this); weightCard.addView(importanceRow);
         body.addView(weightCard);
         renderScale(difficultyRow, difficulty, true);
         renderScale(importanceRow, importance, false);
         space(body, 16);
-        body.addView(text("保存后先查看系统推荐时间，再到日程中调整。", 12, MUTED, false));
+        body.addView(text("After saving you will see the suggested time, which you can adjust in the schedule.", 12, MUTED, false));
 
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(22), dp(10), dp(22), dp(14));
         footer.setBackgroundColor(BG);
-        save = text(editingTaskId > 0 ? "保存任务信息" : "保存并查看推荐", 16, INK, true);
+        // App-wide primary action: dark button with white text.
+        save = text(editingTaskId > 0 ? "Save changes" : "Save and plan", 16, Color.WHITE, true);
         save.setGravity(Gravity.CENTER);
-        save.setBackground(shape(MINT, 18));
+        save.setBackground(shape(INK, 16));
         save.setOnClickListener(v -> saveTask());
         footer.addView(save, new LinearLayout.LayoutParams(-1, dp(54)));
         page.addView(footer);
@@ -179,7 +180,7 @@ public class AddTaskActivity extends AppCompatActivity {
     private void renderCategories() {
         categoryRow.removeAllViews();
         String[] keys = {"Study", "Work", "Life"};
-        String[] names = {"学习", "工作", "生活"};
+        String[] names = {"Study", "Work", "Life"};
         for (int i = 0; i < keys.length; i++) {
             final String key = keys[i];
             TextView choice = text(names[i], 14, INK, category.equals(key));
@@ -222,7 +223,7 @@ public class AddTaskActivity extends AppCompatActivity {
     private void loadTask() {
         RepositoryProvider.getTaskRepository().getTaskById(editingTaskId, new TaskRepository.Callback<Task>() {
             @Override public void onSuccess(Task task) {
-                if (task == null) { message("任务不存在"); finish(); return; }
+                if (task == null) { message("This task no longer exists."); finish(); return; }
                 sourceTask = task;
                 title.setText(task.getTitle());
                 description.setText(task.getDescription());
@@ -235,7 +236,7 @@ public class AddTaskActivity extends AppCompatActivity {
                 renderScale(importanceRow, importance, false);
                 restoreDraft();
             }
-            @Override public void onError(Exception error) { message("读取任务失败：" + error.getMessage()); finish(); }
+            @Override public void onError(Exception error) { message("Could not read the task: " + error.getMessage()); finish(); }
         });
     }
 
@@ -261,9 +262,9 @@ public class AddTaskActivity extends AppCompatActivity {
         String name = title.getText().toString().trim();
         int expected;
         try { expected = Integer.parseInt(estimate.getText().toString().trim()); }
-        catch (NumberFormatException error) { message("请填写预计任务时长"); return; }
-        if (name.isEmpty()) { title.setError("请填写任务名称"); title.requestFocus(); return; }
-        if (expected <= 0) { message("预计任务时长必须大于 0"); return; }
+        catch (NumberFormatException error) { message("Enter the estimated duration."); return; }
+        if (name.isEmpty()) { title.setError("Enter a task name"); title.requestFocus(); return; }
+        if (expected <= 0) { message("The estimated duration must be above 0."); return; }
         long due = 0;
         String dueText = deadline.getText().toString().trim();
         if (!dueText.isEmpty()) {
@@ -273,14 +274,14 @@ public class AddTaskActivity extends AppCompatActivity {
                 Date parsed = format.parse(dueText);
                 if (parsed == null || !dueText.equals(format.format(parsed))) throw new ParseException("Invalid date", 0);
                 due = parsed.getTime();
-            } catch (ParseException error) { deadline.setError("请按 yyyy-MM-dd HH:mm 输入"); deadline.requestFocus(); return; }
+            } catch (ParseException error) { deadline.setError("Use yyyy-MM-dd HH:mm"); deadline.requestFocus(); return; }
         }
         Task task = new Task(name, category, expected, difficulty, importance, due);
         task.setTaskType(selectedType());
         task.setDescription(description.getText().toString().trim());
-        save.setEnabled(false); save.setText("正在保存…");
+        save.setEnabled(false); save.setText("Saving…");
         if (editingTaskId > 0) {
-            if (sourceTask == null) { message("任务仍在加载，请稍候"); resetSave(); return; }
+            if (sourceTask == null) { message("The task is still loading. Please wait."); resetSave(); return; }
             task.setTaskId(editingTaskId);
             task.setPredictedDuration(sourceTask.getPredictedDuration());
             task.setStatus(sourceTask.getStatus());
@@ -300,12 +301,12 @@ public class AddTaskActivity extends AppCompatActivity {
         } else {
             RepositoryProvider.getTaskRepository().addTask(task, new TaskRepository.Callback<Long>() {
                 @Override public void onSuccess(Long id) {
-                    if (id == null || id <= 0 || id > Integer.MAX_VALUE) { message("任务保存失败"); resetSave(); return; }
+                    if (id == null || id <= 0 || id > Integer.MAX_VALUE) { message("Could not save the task."); resetSave(); return; }
                     setResult(RESULT_OK);
                     save.setText("Scheduling…");
                     refreshLearning(() -> scheduleAndShow((int) (long) id, task.getTitle()));
                 }
-                @Override public void onError(Exception error) { message("保存失败：" + error.getMessage()); resetSave(); }
+                @Override public void onError(Exception error) { message("Could not save: " + error.getMessage()); resetSave(); }
             });
         }
     }
@@ -338,7 +339,7 @@ public class AddTaskActivity extends AppCompatActivity {
     private void persistEdit(Task task,Integer remaining) {
         learning.updateTask(task,remaining,new TaskRepository.Callback<Integer>() {
             public void onSuccess(Integer rows) {
-                if(rows==null||rows==0){message("任务未找到");resetSave();return;}
+                if(rows==null||rows==0){message("Task not found.");resetSave();return;}
                 setResult(RESULT_OK);
                 save.setText("Updating schedule…");
                 AutoScheduler.regenerateToday(AddTaskActivity.this, new AutoScheduler.Listener() {
@@ -357,14 +358,14 @@ public class AddTaskActivity extends AppCompatActivity {
             @Override public void onSuccess(Void ignored) { if (!isFinishing() && !isDestroyed()) next.run(); }
             @Override public void onError(Exception error) {
                 if (isFinishing() || isDestroyed()) return;
-                message("任务已保存，但预测更新失败；生成日程时会重试。"); next.run();
+                message("Task saved, but the estimate could not be updated. It will retry when planning."); next.run();
             }
         });
     }
 
     private void resetSave() {
         save.setEnabled(true);
-        save.setText(editingTaskId > 0 ? "保存任务信息" : "保存并查看推荐");
+        save.setText(editingTaskId > 0 ? "Save changes" : "Save and plan");
     }
 
     /** After saving, runs the scheduler for today, then reads the recommended slots back. */
@@ -387,14 +388,14 @@ public class AddTaskActivity extends AppCompatActivity {
     private void showRecommendation(int taskId, String taskTitle) {
         RepositoryProvider.getTaskRepository().getTaskById(taskId, new TaskRepository.Callback<Task>() {
             @Override public void onSuccess(Task task) {
-                if (task == null) { message("任务未找到"); return; }
+                if (task == null) { message("Task not found."); return; }
                 RepositoryProvider.getScheduleRepository().getScheduleByTaskId(taskId,
                         new TaskRepository.Callback<List<ScheduleItem>>() {
                             @Override public void onSuccess(List<ScheduleItem> rows) { renderRecommendation(task, rows); }
-                            @Override public void onError(Exception error) { message("读取推荐时间失败"); renderRecommendation(task, null); }
+                            @Override public void onError(Exception error) { message("Could not read the suggested time."); renderRecommendation(task, null); }
                         });
             }
-            @Override public void onError(Exception error) { message("读取任务失败"); }
+            @Override public void onError(Exception error) { message("Could not read the task."); }
         });
     }
 
@@ -405,9 +406,9 @@ public class AddTaskActivity extends AppCompatActivity {
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(24), dp(32), dp(24), dp(24));
         page.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
-        body.addView(text("第 2 步 · 推荐排程", 13, Color.rgb(52, 126, 91), true));
+        body.addView(text("STEP 2 · SUGGESTED TIME", 11, Color.rgb(52, 126, 91), true));
         space(body, 10);
-        body.addView(text("任务已保存", 28, INK, true));
+        body.addView(text("Task saved", 28, INK, true));
         space(body, 8);
         body.addView(text(task.getTitle(), 17, MUTED, false));
         space(body, 28);
@@ -416,23 +417,23 @@ public class AddTaskActivity extends AppCompatActivity {
         if (rows != null) for (ScheduleItem item : rows) plannedMinutes += Math.max(0,
                 (int) ((item.getEndTime() - item.getStartTime()) / 60_000L));
         int expectedMinutes = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
-        card.addView(text("预计完成用时  " + expectedMinutes + " 分钟"
-                + (task.getPredictedDuration() > 0 ? " · 系统预测" : " · 用户预估"), 15, INK, true));
+        card.addView(text("Expected  " + expectedMinutes + " min"
+                + (task.getPredictedDuration() > 0 ? " · Tempo prediction" : " · your estimate"), 15, INK, true));
         space(card, 9);
-        card.addView(text(rows == null || rows.isEmpty() ? "已安排时间  等待排程"
-                : "已安排时间  " + plannedMinutes + " 分钟", 14, MUTED, false));
+        card.addView(text(rows == null || rows.isEmpty() ? "Planned  waiting"
+                : "Planned  " + plannedMinutes + " min", 14, MUTED, false));
         space(card, 17);
         rule(card);
         space(card, 17);
         if (rows == null || rows.isEmpty()) {
-            card.addView(text("等待推荐时间", 20, INK, true));
+            card.addView(text("Waiting for a time slot", 20, INK, true));
             space(card, 10);
             card.addView(text(scheduleNote != null ? scheduleNote
-                    : "排程生成后，这里会显示建议时段。返回日程后可查看已安排的任务。", 14, MUTED, false));
+                    : "Suggested slots appear here once the plan is generated. You can also check the schedule.", 14, MUTED, false));
         } else {
-            card.addView(text("建议时段", 20, INK, true));
+            card.addView(text("Suggested slots", 20, INK, true));
             space(card, 12);
-            SimpleDateFormat dateFormat = new SimpleDateFormat("M月d日 HH:mm", Locale.CHINA);
+            SimpleDateFormat dateFormat = new SimpleDateFormat("EEE, MMM d · HH:mm", Locale.US);
             SimpleDateFormat timeFormat = new SimpleDateFormat("HH:mm", Locale.CHINA);
             for (ScheduleItem item : rows) {
                 card.addView(text(dateFormat.format(new Date(item.getStartTime())) + " – "
@@ -443,32 +444,35 @@ public class AddTaskActivity extends AppCompatActivity {
                 card.addView(text(scheduleNote, 13, MUTED, false));
                 space(card, 6);
             }
-            card.addView(text("返回日程，点击任务即可调整时段。", 13, MUTED, false));
+            card.addView(text("Open the schedule and tap the task to adjust a slot.", 13, MUTED, false));
         }
         body.addView(card);
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(22), dp(10), dp(22), dp(20));
         if (rows == null || rows.isEmpty()) {
-            TextView retry = text("刷新推荐", 14, Color.rgb(52, 126, 91), true);
+            TextView retry = text("Plan again", 14, Color.rgb(52, 126, 91), true);
             retry.setGravity(Gravity.CENTER);
             retry.setOnClickListener(v -> scheduleAndShow(task.getTaskId(), task.getTitle()));
             footer.addView(retry, new LinearLayout.LayoutParams(-1, dp(42)));
         }
-        TextView done = text("返回日程", 16, INK, true);
+        TextView done = text("Done", 16, INK, true);
         done.setGravity(Gravity.CENTER); done.setBackground(shape(MINT, 18));
         done.setOnClickListener(v -> finish());
         footer.addView(done, new LinearLayout.LayoutParams(-1, dp(54)));
         page.addView(footer);
     }
     private void section(LinearLayout parent, String value) {
-        TextView label = text(value, 13, MUTED, true);
+        // Section label in the app-wide eyebrow style.
+        TextView label = text(value.toUpperCase(Locale.US), 11, Color.rgb(52, 126, 91), true);
+        label.setLetterSpacing(0.14f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(10); parent.addView(label, params);
     }
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(17), dp(12), dp(17), dp(12)); card.setBackground(shape(Color.WHITE, 18));
+        card.setPadding(dp(18), dp(12), dp(18), dp(12)); card.setBackground(shape(Color.WHITE, 22));
+        card.setElevation(dp(2));
         return card;
     }
     private EditText edit(String hint, String value, boolean numeric) {

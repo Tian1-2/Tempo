@@ -1,12 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="insights_white">#FFFFFF</color>
-    <color name="insights_ice">#EDF4FF</color>
-    <color name="insights_pale">#F5F8FE</color>
-    <color name="insights_navy">#0B1B3A</color>
-    <color name="insights_muted">#66758F</color>
-    <color name="insights_blue">#2467C9</color>
-    <color name="insights_line">#E5EBF3</color>
+    <!-- Aligned with the app-wide palette (ui/Ui.java): off-white page, ink text, green accent. -->
+    <color name="insights_white">#F7F8F5</color>
+    <color name="insights_ice">#E9F5EE</color>
+    <color name="insights_pale">#FFFFFF</color>
+    <color name="insights_navy">#1E3034</color>
+    <color name="insights_muted">#6E7E7C</color>
+    <color name="insights_blue">#347E5B</color>
+    <color name="insights_line">#E4EAE5</color>
     <string name="insights_title">Insights</string>
     <string name="insights_subtitle">A clearer view of your time.</string>
     <string name="insights_home">Home</string>

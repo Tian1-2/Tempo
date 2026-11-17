@@ -2,21 +2,21 @@ package com.tempo.app.model;
 
 public class ScheduleItem {
 
-    private int scheduleId;          // 主键
-    private int taskId;              // 外键，对应 tasks.task_id
+    private int scheduleId;          // primary key
+    private int taskId;              // foreign key to tasks.task_id
 
-    private String scheduledDate;    // 日期，如 "2026-11-12"
+    private String scheduledDate;    // date, e.g. "2026-11-12"
 
-    private long startTime;          // 开始时间（毫秒 timestamp）
-    private long endTime;            // 结束时间（毫秒 timestamp）
+    private long startTime;          // start (ms timestamp)
+    private long endTime;            // end (ms timestamp)
 
-    private boolean manuallyEdited;  // 用户是否手动改过
+    private boolean manuallyEdited;  // whether the user adjusted it
     private String status;           // PLANNED / COMPLETED / SKIPPED
 
     public ScheduleItem() {
     }
 
-    // ---- Getter / Setter（Generate 自动生成）----
+    // ---- Getters / setters ----
 
     public int getScheduleId() { return scheduleId; }
     public void setScheduleId(int scheduleId) { this.scheduleId = scheduleId; }

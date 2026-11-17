@@ -54,7 +54,7 @@ public class InsightsActivity extends AppCompatActivity {
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        white = getColor(R.color.insights_white);
+        white = Color.WHITE; // card fill; the page itself uses insights_white (off-white) from the layout
         ice = getColor(R.color.insights_ice);
         pale = getColor(R.color.insights_pale);
         navy = getColor(R.color.insights_navy);
@@ -496,7 +496,9 @@ public class InsightsActivity extends AppCompatActivity {
         LinearLayout card = new LinearLayout(this);
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(20), dp(20), dp(20), dp(20));
-        card.setBackground(shape(color, border));
+        // App-wide card style: white cards float on the off-white page with a soft shadow, no border.
+        card.setBackground(shape(color, false));
+        if (color == white) card.setElevation(dp(2));
         return card;
     }
 
@@ -504,7 +506,7 @@ public class InsightsActivity extends AppCompatActivity {
         // GradientDrawable is Android's shape drawable; this is a single flat color.
         GradientDrawable shape = new GradientDrawable();
         shape.setColor(color);
-        shape.setCornerRadius(dp(20));
+        shape.setCornerRadius(dp(22));
         if (border) shape.setStroke(dp(1), line);
         return shape;
     }

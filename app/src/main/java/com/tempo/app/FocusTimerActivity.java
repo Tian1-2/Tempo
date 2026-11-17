@@ -71,10 +71,10 @@ public class FocusTimerActivity extends AppCompatActivity {
         setContentView(page);
         LinearLayout navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER_VERTICAL);
-        BackChevronView back = new BackChevronView(this, "返回日程");
+        BackChevronView back = new BackChevronView(this, "Back");
         back.setOnClickListener(v -> finish());
         navigation.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView backLabel = text("日程", 14, Color.rgb(105, 120, 119), false);
+        TextView backLabel = text("Back", 14, Color.rgb(105, 120, 119), false);
         backLabel.setGravity(Gravity.CENTER_VERTICAL);
         backLabel.setOnClickListener(v -> finish());
         backLabel.setIncludeFontPadding(false);
@@ -88,8 +88,9 @@ public class FocusTimerActivity extends AppCompatActivity {
         center.setGravity(Gravity.CENTER);
         center.setPadding(dp(22), 0, dp(22), 0);
         page.addView(center, new LinearLayout.LayoutParams(-1, 0, 1));
-        TextView kicker = text("专注计时", 13, Color.rgb(52, 126, 91), true);
+        TextView kicker = text("FOCUS", 11, Color.rgb(52, 126, 91), true);
         kicker.setGravity(Gravity.CENTER);
+        kicker.setLetterSpacing(0.14f);
         center.addView(kicker);
         space(center, 12);
         TextView taskTitle = text(title, 27, INK, true);
@@ -109,7 +110,7 @@ public class FocusTimerActivity extends AppCompatActivity {
         LinearLayout digits = new LinearLayout(this);
         digits.setOrientation(LinearLayout.VERTICAL);
         digits.setGravity(Gravity.CENTER);
-        status = text("准备开始", 13, Color.rgb(52, 126, 91), true);
+        status = text("Ready", 13, Color.rgb(52, 126, 91), true);
         status.setGravity(Gravity.CENTER);
         digits.addView(status);
         space(digits, 12);
@@ -118,11 +119,11 @@ public class FocusTimerActivity extends AppCompatActivity {
         clock.setGravity(Gravity.CENTER);
         digits.addView(clock);
         space(digits, 12);
-        TextView elapsedLabel = text("已专注时间", 12, Color.rgb(105, 120, 119), false);
+        TextView elapsedLabel = text("Focused", 12, Color.rgb(105, 120, 119), false);
         elapsedLabel.setGravity(Gravity.CENTER);
         digits.addView(elapsedLabel);
         space(digits, 8);
-        targetLabel = text("目标时间读取中", 12, Color.rgb(105, 120, 119), false);
+        targetLabel = text("Loading target…", 12, Color.rgb(105, 120, 119), false);
         targetLabel.setGravity(Gravity.CENTER);
         digits.addView(targetLabel);
         dial.addView(digits, new FrameLayout.LayoutParams(-1, -1));
@@ -131,18 +132,19 @@ public class FocusTimerActivity extends AppCompatActivity {
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(22), 0, dp(22), 0);
-        TextView note = text("离开页面后，计时仍会继续", 12, Color.rgb(105, 120, 119), false);
+        TextView note = text("The timer keeps running if you leave this page", 12, Color.rgb(105, 120, 119), false);
         note.setGravity(Gravity.CENTER);
         footer.addView(note);
         space(footer, 18);
-        toggle = action("开始专注", MINT, false);
+        toggle = action("Start focus", INK, false);
+        toggle.setTextColor(Color.WHITE); // app-wide primary action: dark button, white text
         toggle.setOnClickListener(v -> {
             if (isRunning()) pause(); else start();
             refresh();
         });
         footer.addView(toggle, new LinearLayout.LayoutParams(-1, dp(56)));
         space(footer, 10);
-        finishAction = action("结束并查看用时", Color.WHITE, true);
+        finishAction = action("Finish and review", Color.WHITE, true);
         finishAction.setOnClickListener(v -> { if (elapsed() > 0) finishSession(); });
         footer.addView(finishAction, new LinearLayout.LayoutParams(-1, dp(54)));
         page.addView(footer);
@@ -180,8 +182,8 @@ public class FocusTimerActivity extends AppCompatActivity {
         if (preparing) return;
         int active = prefs().getInt("taskId", Integer.MIN_VALUE);
         if (active != Integer.MIN_VALUE && active != taskId) {
-            new AlertDialog.Builder(this).setMessage("请先结束另一项任务的计时。")
-                    .setPositiveButton("好的", null).show(); return;
+            new AlertDialog.Builder(this).setMessage("Finish the timer that is running for another task first.")
+                    .setPositiveButton("OK", null).show(); return;
         }
         if (taskId <= 0) { beginClock(); return; }
         preparing = true; refresh();
@@ -193,7 +195,7 @@ public class FocusTimerActivity extends AppCompatActivity {
             }
             @Override public void onError(Exception e) {
                 preparing = false; refresh();
-                new AlertDialog.Builder(FocusTimerActivity.this).setMessage(e.getMessage()).setPositiveButton("好的", null).show();
+                new AlertDialog.Builder(FocusTimerActivity.this).setMessage(e.getMessage()).setPositiveButton("OK", null).show();
             }
         });
     }
@@ -228,21 +230,21 @@ public class FocusTimerActivity extends AppCompatActivity {
         long seconds = elapsed() / 1000;
         clock.setText(String.format(Locale.US, "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60));
         boolean running = isRunning();
-        status.setText(running ? "专注进行中" : seconds > 0 ? "已暂停" : "准备开始");
+        status.setText(running ? "Focusing" : seconds > 0 ? "Paused" : "Ready");
         if (targetMinutes > 0) {
             long targetSeconds = targetMinutes * 60L;
             long totalSeconds = previousFocusSeconds + seconds;
             progressRing.setProgress(Math.min(1f, totalSeconds / (float) targetSeconds));
             targetLabel.setText(totalSeconds > targetSeconds
-                    ? "累计已超出预计 " + ((totalSeconds - targetSeconds + 59) / 60) + " 分钟"
-                    : "累计 " + (totalSeconds / 60) + " / 预计 " + targetMinutes + " 分钟");
+                    ? ((totalSeconds - targetSeconds + 59) / 60) + " min over the expected time"
+                    : (totalSeconds / 60) + " of " + targetMinutes + " min expected");
         } else {
             progressRing.setProgress(0f);
-            targetLabel.setText("暂无预计用时");
+            targetLabel.setText("No expected time");
         }
         toggle.setEnabled(!preparing);
         finishAction.setEnabled(!preparing);
-        toggle.setText(running ? "暂停计时" : seconds > 0 ? "继续专注" : "开始专注");
+        toggle.setText(running ? "Pause" : seconds > 0 ? "Resume" : "Start focus");
         finishAction.setAlpha(seconds > 0 ? 1f : 0.48f);
         handler.removeCallbacks(tick);
         handler.postDelayed(tick, 1000);
@@ -251,8 +253,8 @@ public class FocusTimerActivity extends AppCompatActivity {
         if (preparing) return;
         pause(); refresh();
         if (taskId <= 0) {
-            new AlertDialog.Builder(this).setMessage("这是示例任务，不会保存反馈。请使用真实任务测试。")
-                    .setPositiveButton("结束", (d, w) -> { clear(); finish(); }).setNegativeButton("返回", null).show();
+            new AlertDialog.Builder(this).setMessage("This is a sample task, so nothing will be saved. Use a real task to record time.")
+                    .setPositiveButton("End", (d, w) -> { clear(); finish(); }).setNegativeButton("Back", null).show();
             return;
         }
         String token = prefs().getString("sessionToken", null);
