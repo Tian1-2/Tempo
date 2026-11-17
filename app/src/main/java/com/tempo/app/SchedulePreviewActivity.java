@@ -131,7 +131,12 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         content.removeAllViews();
         FrameLayout header = new FrameLayout(this);
         HomeIconView back = new HomeIconView(this);
-        back.setOnClickListener(v -> { startActivity(new Intent(this, MainHubPlaceholderActivity.class)); finish(); });
+        back.setOnClickListener(v -> {
+            Intent home = new Intent(this, HomeActivity.class);
+            home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
+            startActivity(home);
+            finish();
+        });
         FrameLayout.LayoutParams backParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.START | Gravity.CENTER_VERTICAL);
         backParams.leftMargin = 0;
         header.addView(back, backParams);

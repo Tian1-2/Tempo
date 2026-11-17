@@ -13,10 +13,10 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * A 的默认排程约束，在固定日程表和 D 的学习结果出来之前使用：
- * 三餐各占 {@link #MEAL_MINUTES} 分钟；从偏好开始时间起 {@link #PRODUCTIVE_MINUTES} 分钟算高效时段。
- * 与手动锁定时段重叠的用餐块会被跳过，避免排程器因"锁定时段与阻塞时间重叠"而报错。
- * 必须在后台线程调用 {@link #getForDate(String)}。
+ * Default constraints used until the fixed-schedule table and D's learned windows exist:
+ * each meal blocks {@link #MEAL_MINUTES} minutes, and {@link #PRODUCTIVE_MINUTES} minutes from the
+ * preferred start time form the productive window. Meal blocks overlapping a manually locked slot are
+ * skipped, otherwise the generator rejects the request. Call {@link #getForDate(String)} off the UI thread.
  */
 public final class DefaultScheduleConstraints implements ScheduleConstraintsProvider {
     public static final int MEAL_MINUTES = 30;
@@ -30,7 +30,7 @@ public final class DefaultScheduleConstraints implements ScheduleConstraintsProv
         return build(dayStart, dayStart + 24 * 60 * MINUTE, profile, existing);
     }
 
-    /** 纯计算，便于单元测试。时刻按 dayStart + 小时分钟 计算（香港无夏令时）。 */
+    /** Pure computation for unit tests. Times are dayStart + hh:mm (Hong Kong has no DST). */
     public static DayConstraints build(long dayStart, long dayEnd, UserProfile profile, List<ScheduleItem> existing) {
         List<Interval> busy = new ArrayList<>();
         List<Interval> productive = new ArrayList<>();

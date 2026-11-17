@@ -243,7 +243,7 @@ public class AddTaskActivity extends AppCompatActivity {
                 @Override public void onSuccess(Integer rows) {
                     if (rows == null || rows == 0) { message("任务未找到"); resetSave(); return; }
                     setResult(RESULT_OK);
-                    save.setText("正在更新排程…");
+                    save.setText("Updating schedule…");
                     AutoScheduler.regenerateToday(new AutoScheduler.Listener() {
                         @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) finish(); }
                         @Override public void onFailed(String error) { message(error); if (!isFinishing()) finish(); }
@@ -256,7 +256,7 @@ public class AddTaskActivity extends AppCompatActivity {
                 @Override public void onSuccess(Long id) {
                     if (id == null || id <= 0 || id > Integer.MAX_VALUE) { message("任务保存失败"); resetSave(); return; }
                     setResult(RESULT_OK);
-                    save.setText("正在排程…");
+                    save.setText("Scheduling…");
                     scheduleAndShow((int) (long) id, task.getTitle());
                 }
                 @Override public void onError(Exception error) { message("保存失败：" + error.getMessage()); resetSave(); }
@@ -269,13 +269,13 @@ public class AddTaskActivity extends AppCompatActivity {
         save.setText(editingTaskId > 0 ? "保存任务信息" : "保存并查看推荐");
     }
 
-    /** 保存后触发 C 的排程服务（今天），写入 schedule_items 后再读取推荐时段。 */
+    /** After saving, runs the scheduler for today, then reads the recommended slots back. */
     private void scheduleAndShow(int taskId, String taskTitle) {
         AutoScheduler.regenerateToday(new AutoScheduler.Listener() {
             @Override public void onScheduled(ScheduleGenerator.Result result) {
                 if (isFinishing() || isDestroyed()) return;
                 int left = AutoScheduler.remainingMinutes(result, taskId);
-                scheduleNote = left > 0 ? "今天剩余时间不够，还有 " + left + " 分钟没排进去。" : null;
+                scheduleNote = left > 0 ? "Not enough time left today: " + left + " min could not be scheduled." : null;
                 showRecommendation(taskId, taskTitle);
             }
             @Override public void onFailed(String error) {

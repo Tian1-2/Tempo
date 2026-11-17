@@ -83,6 +83,11 @@ public class ScheduleRepository {
         scheduleDao.replaceGeneratedForDate(date, items);
     }
 
+    /** Marks the task's PLANNED slots on the date as COMPLETED so re-planning keeps them. Background thread only. */
+    public int markTaskCompletedOnDateSync(int taskId, String date) {
+        return scheduleDao.markTaskCompletedOnDate(taskId, date);
+    }
+
     public void updatePlannedTime(int scheduleId, String date, long start, long end,
                                   TaskRepository.Callback<Integer> callback) {
         executor.execute(() -> {

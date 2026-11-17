@@ -145,6 +145,15 @@ public class ScheduleDao {
         }
     }
 
+    // Marks one task's PLANNED slots on a date as COMPLETED.
+    public int markTaskCompletedOnDate(int taskId, String date) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        ContentValues values = new ContentValues();
+        values.put("status", "COMPLETED");
+        return db.update("schedule_items", values, "task_id = ? AND scheduled_date = ? AND status = ?",
+                new String[]{String.valueOf(taskId), date, "PLANNED"});
+    }
+
     // 重排前清掉某任务的所有旧排程
     public int deleteScheduleByTaskId(int taskId) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();

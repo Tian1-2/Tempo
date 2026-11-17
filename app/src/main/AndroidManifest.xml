@@ -18,9 +18,9 @@
         <activity android:name=".FocusTimerActivity" android:exported="false" />
         <activity android:name=".AddTaskActivity" android:exported="false" />
         <activity android:name=".ProfileSettingsActivity" android:exported="false" />
-        <activity android:name=".MainHubPlaceholderActivity" android:exported="false" />
+        <activity android:name=".SchedulePreviewActivity" android:exported="false" />
         <activity
-            android:name=".SchedulePreviewActivity"
+            android:name=".HomeActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

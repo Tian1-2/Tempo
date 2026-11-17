@@ -22,6 +22,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.tempo.app.model.TaskFeedback;
 import com.tempo.app.repository.RepositoryProvider;
+import com.tempo.app.home.TaskCompletion;
 import com.tempo.app.repository.TaskRepository;
 
 import java.util.Locale;
@@ -215,6 +216,10 @@ public class FocusTimerActivity extends AppCompatActivity {
         panel.addView(confirm, new LinearLayout.LayoutParams(-1, dp(52)));
         confirm.setOnClickListener(v -> { dialog.dismiss(); save(minutes); });
         space(panel, 9);
+        TextView complete = action("Mark task done", BG, true);
+        panel.addView(complete, new LinearLayout.LayoutParams(-1, dp(52)));
+        complete.setOnClickListener(v -> { dialog.dismiss(); completeTask(minutes); });
+        space(panel, 9);
         TextView discard = action("结束但不保存", BG, false);
         panel.addView(discard, new LinearLayout.LayoutParams(-1, dp(48)));
         discard.setOnClickListener(v -> { dialog.dismiss(); clear(); finish(); });
@@ -236,6 +241,15 @@ public class FocusTimerActivity extends AppCompatActivity {
             @Override public void onSuccess(Long id) { clear(); finish(); }
             @Override public void onError(Exception error) { new AlertDialog.Builder(FocusTimerActivity.this)
                     .setMessage("保存失败：" + error.getMessage()).setPositiveButton("好的", null).show(); }
+        });
+    }
+    /** Saves this session as the final one and marks the task COMPLETED. */
+    private void completeTask(int minutes) {
+        if (taskId <= 0) { clear(); finish(); return; } // Demo task.
+        TaskCompletion.complete(taskId, minutes, new TaskRepository.Callback<Void>() {
+            @Override public void onSuccess(Void ignored) { clear(); finish(); }
+            @Override public void onError(Exception error) { new AlertDialog.Builder(FocusTimerActivity.this)
+                    .setMessage("Could not save: " + error.getMessage()).setPositiveButton("OK", null).show(); }
         });
     }
     private void clear() { prefs().edit().clear().apply(); }
