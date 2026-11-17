@@ -13,10 +13,16 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.Spinner;
+import android.widget.ArrayAdapter;
+import android.app.AlertDialog;
 
 import androidx.appcompat.app.AppCompatActivity;
 
 import com.tempo.app.model.ScheduleItem;
+import com.tempo.app.learning.LearningRepository;
+import com.tempo.app.learning.LearningStore;
+import com.tempo.app.learning.TaskTypes;
 import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
@@ -40,13 +46,18 @@ public class AddTaskActivity extends AppCompatActivity {
     private LinearLayout page;
     private int editingTaskId = -1;
     private Task sourceTask;
+    private LearningRepository learning;
+    private Spinner taskType;
+    private Bundle draftState;
     private LinearLayout categoryRow, difficultyRow, importanceRow;
     private String category = "Study";
     private int difficulty = 3, importance = 3;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
+        draftState=state;
         RepositoryProvider.init(this);
+        learning = new LearningRepository(this);
         selectedDayMillis = getIntent().getLongExtra("selectedDayMillis", System.currentTimeMillis());
         editingTaskId = getIntent().getIntExtra("taskId", -1);
         getWindow().setStatusBarColor(BG);
@@ -105,6 +116,11 @@ public class AddTaskActivity extends AppCompatActivity {
         categoryRow.setOrientation(LinearLayout.HORIZONTAL);
         body.addView(categoryRow);
         renderCategories();
+        space(body,12);
+        body.addView(text("Task type · optional",13,MUTED,true));
+        taskType=new Spinner(this);body.addView(taskType,new LinearLayout.LayoutParams(-1,dp(48)));
+        renderTypes(null);
+        body.addView(text("Helps Tempo compare tasks of the same type.",12,MUTED,false));
         space(body, 20);
 
         section(body, "完成条件");
@@ -154,7 +170,7 @@ public class AddTaskActivity extends AppCompatActivity {
         save.setOnClickListener(v -> saveTask());
         footer.addView(save, new LinearLayout.LayoutParams(-1, dp(54)));
         page.addView(footer);
-        if (editingTaskId > 0) loadTask();
+        if (editingTaskId > 0) loadTask(); else restoreDraft();
     }
 
     private void renderCategories() {
@@ -169,9 +185,19 @@ public class AddTaskActivity extends AppCompatActivity {
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(46), 1);
             if (i > 0) params.leftMargin = dp(9);
             categoryRow.addView(choice, params);
-            choice.setOnClickListener(v -> { category = key; renderCategories(); });
+            choice.setOnClickListener(v -> {if(!category.equals(key)){category=key;renderTypes(null);} renderCategories(); });
         }
     }
+
+    private void renderTypes(String existing) {
+        if(taskType==null)return;
+        List<String> options=TaskTypes.options(category,existing);
+        ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,options);
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);taskType.setAdapter(adapter);
+        taskType.setSelection(existing==null?0:Math.max(0,options.indexOf(existing.trim())));
+    }
+
+    private String selectedType() {return taskType.getSelectedItemPosition()==0?null:taskType.getSelectedItem().toString();}
 
     private void renderScale(LinearLayout row, int selected, boolean isDifficulty) {
         row.removeAllViews();
@@ -201,11 +227,31 @@ public class AddTaskActivity extends AppCompatActivity {
                 deadline.setText(task.getDeadline() > 0
                         ? new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(new Date(task.getDeadline())) : "");
                 category = task.getCategory(); difficulty = task.getDifficulty(); importance = task.getImportance();
+                renderTypes(task.getTaskType());
                 renderCategories(); renderScale(difficultyRow, difficulty, true);
                 renderScale(importanceRow, importance, false);
+                restoreDraft();
             }
             @Override public void onError(Exception error) { message("读取任务失败：" + error.getMessage()); finish(); }
         });
+    }
+
+    private void restoreDraft() {
+        if(draftState==null)return;
+        title.setText(draftState.getString("draftTitle",title.getText().toString()));
+        description.setText(draftState.getString("draftDescription",description.getText().toString()));
+        estimate.setText(draftState.getString("draftEstimate",estimate.getText().toString()));
+        deadline.setText(draftState.getString("draftDeadline",deadline.getText().toString()));
+        category=draftState.getString("draftCategory",category);difficulty=draftState.getInt("draftDifficulty",difficulty);importance=draftState.getInt("draftImportance",importance);
+        renderCategories();renderTypes(draftState.getString("draftType",null));renderScale(difficultyRow,difficulty,true);renderScale(importanceRow,importance,false);
+        draftState=null;
+    }
+
+    @Override protected void onSaveInstanceState(Bundle out) {
+        out.putString("draftTitle",title.getText().toString());out.putString("draftDescription",description.getText().toString());
+        out.putString("draftEstimate",estimate.getText().toString());out.putString("draftDeadline",deadline.getText().toString());
+        out.putString("draftCategory",category);out.putString("draftType",selectedType());out.putInt("draftDifficulty",difficulty);out.putInt("draftImportance",importance);
+        super.onSaveInstanceState(out);
     }
 
     private void saveTask() {
@@ -227,32 +273,81 @@ public class AddTaskActivity extends AppCompatActivity {
             } catch (ParseException error) { deadline.setError("请按 yyyy-MM-dd HH:mm 输入"); deadline.requestFocus(); return; }
         }
         Task task = new Task(name, category, expected, difficulty, importance, due);
+        task.setTaskType(selectedType());
         task.setDescription(description.getText().toString().trim());
         save.setEnabled(false); save.setText("正在保存…");
         if (editingTaskId > 0) {
             if (sourceTask == null) { message("任务仍在加载，请稍候"); resetSave(); return; }
             task.setTaskId(editingTaskId);
-            task.setTaskType(sourceTask.getTaskType());
             task.setPredictedDuration(sourceTask.getPredictedDuration());
             task.setStatus(sourceTask.getStatus());
             task.setCreatedAt(sourceTask.getCreatedAt());
-            RepositoryProvider.getTaskRepository().updateTask(task, new TaskRepository.Callback<Integer>() {
-                @Override public void onSuccess(Integer rows) {
-                    if (rows == null || rows == 0) { message("任务未找到"); resetSave(); return; }
-                    setResult(RESULT_OK); finish();
+            learning.editContext(editingTaskId,new TaskRepository.Callback<LearningStore.EditContext>() {
+                public void onSuccess(LearningStore.EditContext context) {
+                    boolean changed=sourceTask.getEstimatedDuration()!=task.getEstimatedDuration()
+                            || !java.util.Objects.equals(sourceTask.getCategory(),task.getCategory())
+                            || !java.util.Objects.equals(normalType(sourceTask.getTaskType()),normalType(task.getTaskType()));
+                    if(changed && getSharedPreferences("tempo_focus_timer",MODE_PRIVATE).getInt("taskId",-1)==editingTaskId) {
+                        message("Finish the active timer before changing this task's estimate, category or type.");resetSave();return;
+                    }
+                    if(context.started && changed) confirmStartedEdit(task,context); else persistEdit(task,null);
                 }
-                @Override public void onError(Exception error) { message("保存失败：" + error.getMessage()); resetSave(); }
+                public void onError(Exception error) {message(error.getMessage());resetSave();}
             });
         } else {
             RepositoryProvider.getTaskRepository().addTask(task, new TaskRepository.Callback<Long>() {
                 @Override public void onSuccess(Long id) {
                     if (id == null || id <= 0 || id > Integer.MAX_VALUE) { message("任务保存失败"); resetSave(); return; }
                     setResult(RESULT_OK);
-                    showRecommendation((int) (long) id, task.getTitle());
+                    refreshLearning(() -> showRecommendation((int) (long) id, task.getTitle()));
                 }
                 @Override public void onError(Exception error) { message("保存失败：" + error.getMessage()); resetSave(); }
             });
         }
+    }
+
+    private static String normalType(String type){return type==null?"":type.trim();}
+
+    private void confirmStartedEdit(Task task,LearningStore.EditContext context) {
+        boolean completed="COMPLETED".equals(sourceTask.getStatus());
+        LinearLayout form=new LinearLayout(this);form.setOrientation(LinearLayout.VERTICAL);form.setPadding(dp(22),dp(12),dp(22),dp(8));
+        form.addView(text("The original prediction stays in your history. Changing the estimate, category or type excludes this task from duration learning and accuracy comparisons.",14,INK,false));
+        EditText left=edit("Remaining minutes", "",true);
+        if(!completed) {
+            space(form,16);form.addView(text("How many minutes are still needed?",14,INK,true));
+            form.addView(left);form.addView(text("Previously recorded: "+context.recorded+" min. Enter the remaining work, not the whole task duration.",12,MUTED,false));
+        }
+        AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Update a started task").setView(form)
+                .setNegativeButton("Cancel",(d,w)->resetSave()).setPositiveButton("Save changes",null).create();
+        dialog.setOnCancelListener(d->resetSave());
+        dialog.setOnShowListener(d->dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v->{
+            Integer remaining=null;
+            if(!completed) try {
+                remaining=Integer.valueOf(left.getText().toString().trim());
+                if(remaining<1||remaining>10080) throw new NumberFormatException();
+            }catch(NumberFormatException error){left.setError("Enter 1–10080 remaining minutes.");return;}
+            dialog.dismiss();persistEdit(task,remaining);
+        }));
+        dialog.show();
+    }
+
+    private void persistEdit(Task task,Integer remaining) {
+        learning.updateTask(task,remaining,new TaskRepository.Callback<Integer>() {
+            public void onSuccess(Integer rows) {if(rows==null||rows==0){message("任务未找到");resetSave();return;}setResult(RESULT_OK);finish();}
+            public void onError(Exception error) {message(error.getMessage());resetSave();}
+        });
+    }
+
+    @Override protected void onDestroy() { if (learning != null) learning.close(); super.onDestroy(); }
+
+    private void refreshLearning(Runnable next) {
+        learning.refresh(new TaskRepository.Callback<Void>() {
+            @Override public void onSuccess(Void ignored) { if (!isFinishing() && !isDestroyed()) next.run(); }
+            @Override public void onError(Exception error) {
+                if (isFinishing() || isDestroyed()) return;
+                message("任务已保存，但预测更新失败；生成日程时会重试。"); next.run();
+            }
+        });
     }
 
     private void resetSave() {
@@ -275,6 +370,7 @@ public class AddTaskActivity extends AppCompatActivity {
     }
 
     private void renderRecommendation(Task task, List<ScheduleItem> rows) {
+        if(rows!=null) {List<ScheduleItem> active=new java.util.ArrayList<>();for(ScheduleItem item:rows)if(!"CANCELLED".equals(item.getStatus()))active.add(item);rows=active;}
         page.removeAllViews();
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);

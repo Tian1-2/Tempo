@@ -83,6 +83,10 @@ public class ScheduleRepository {
         scheduleDao.replaceGeneratedForDate(date, items);
     }
 
+    public void replaceGeneratedForDateSync(String date, List<ScheduleItem> items, long preserveBefore) {
+        scheduleDao.replaceGeneratedForDate(date, items, preserveBefore);
+    }
+
     public void updatePlannedTime(int scheduleId, String date, long start, long end,
                                   TaskRepository.Callback<Integer> callback) {
         executor.execute(() -> {

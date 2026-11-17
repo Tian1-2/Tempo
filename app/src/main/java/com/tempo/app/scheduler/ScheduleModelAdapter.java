@@ -7,18 +7,25 @@ import com.tempo.app.scheduler.ScheduleGenerator.Session;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Collections;
 
 /** Converts the database teammate's models without coupling the algorithm to SQLite. */
 public final class ScheduleModelAdapter {
     private ScheduleModelAdapter() {}
 
     public static List<ScheduleGenerator.Task> pendingTasks(List<Task> source) {
+        return pendingTasks(source, Collections.<Integer, Integer>emptyMap());
+    }
+
+    public static List<ScheduleGenerator.Task> pendingTasks(List<Task> source, Map<Integer, Integer> remaining) {
         if (source == null) throw new IllegalArgumentException("Tasks are null");
         List<ScheduleGenerator.Task> result = new ArrayList<>();
         for (Task task : source) {
             if (task == null) throw new IllegalArgumentException("Null task");
             if (!"PENDING".equals(task.getStatus()) && !"IN_PROGRESS".equals(task.getStatus())) continue;
             int minutes = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
+            minutes = remaining.getOrDefault(task.getTaskId(), minutes);
             if (minutes <= 0) throw new IllegalArgumentException("Task has no positive duration: " + task.getTaskId());
             result.add(new ScheduleGenerator.Task(task.getTaskId(), minutes,
                     task.getDeadline() > 0 ? task.getDeadline() : null,
@@ -27,12 +34,14 @@ public final class ScheduleModelAdapter {
         return result;
     }
 
-    public static List<Session> lockedSessions(List<ScheduleItem> existing) {
+    public static List<Session> lockedSessions(List<ScheduleItem> existing) { return lockedSessions(existing, Long.MIN_VALUE); }
+
+    public static List<Session> lockedSessions(List<ScheduleItem> existing, long earliest) {
         if (existing == null) throw new IllegalArgumentException("Schedule items are null");
         List<Session> result = new ArrayList<>();
         for (ScheduleItem item : existing) {
             if (item == null) throw new IllegalArgumentException("Null schedule item");
-            if (item.isManuallyEdited() && "PLANNED".equals(item.getStatus())) {
+            if (item.isManuallyEdited() && "PLANNED".equals(item.getStatus()) && item.getStartTime() >= earliest) {
                 result.add(new Session(item.getTaskId(), new Interval(item.getStartTime(), item.getEndTime()), true));
             }
         }

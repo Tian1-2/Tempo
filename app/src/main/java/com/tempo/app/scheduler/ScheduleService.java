@@ -1,6 +1,9 @@
 package com.tempo.app.scheduler;
 
 import android.os.Looper;
+import android.database.Cursor;
+import com.tempo.app.learning.LearningStore;
+import com.tempo.app.model.Task;
 
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.UserProfile;
@@ -36,6 +39,8 @@ public final class ScheduleService {
             throw new IllegalStateException("ScheduleService must run on a background thread");
         }
         if (constraints == null) throw new IllegalArgumentException("Constraints are null");
+        LearningStore learning = new LearningStore(RepositoryProvider.getDatabaseHelper());
+        learning.refreshPredictions(System.currentTimeMillis());
         UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
         if (profile == null) throw new IllegalStateException("Set a user profile before generating a schedule");
         ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
@@ -48,21 +53,30 @@ public final class ScheduleService {
         long sleep = atTime(start, profile.getSleepTime());
         if (wake >= sleep) throw new IllegalArgumentException("Wake time must precede sleep time on the same day");
         List<Interval> blocked = new ArrayList<>(constraints.fixedBusyIntervals);
-        for (ScheduleItem item : existing) {
-            if ("COMPLETED".equals(item.getStatus()) || "SKIPPED".equals(item.getStatus())) {
-                blocked.add(new Interval(item.getStartTime(), item.getEndTime()));
-            }
-        }
         long now = System.currentTimeMillis();
         long earliest = Math.max(day.start, Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE);
         if (day.start > now) earliest = day.start;
+        for (ScheduleItem item : existing) {
+            if ("CANCELLED".equals(item.getStatus())) continue;
+            if ("COMPLETED".equals(item.getStatus()) || "SKIPPED".equals(item.getStatus()) || item.getStartTime() < earliest) {
+                blocked.add(new Interval(item.getStartTime(), item.getEndTime()));
+            }
+        }
+        List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
+        long usedToday = 0;
+        try (Cursor c = RepositoryProvider.getDatabaseHelper().getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(actual_duration),0) FROM task_feedback WHERE actual_duration>0 AND completed_at>=? AND completed_at<? AND completed_at<=?",
+                new String[]{String.valueOf(day.start), String.valueOf(day.end), String.valueOf(now)})) {
+            if (c.moveToFirst()) usedToday = c.getLong(0);
+        }
+        int capacity = (int) Math.max(0, profile.getDailyCapacity() - usedToday);
         ScheduleGenerator.Request request = new ScheduleGenerator.Request(day, earliest,
-                ScheduleModelAdapter.pendingTasks(RepositoryProvider.getTaskRepository().getPendingTasksSync()),
+                ScheduleModelAdapter.pendingTasks(pending, learning.remaining(pending, profile.getFocusDuration())),
                 Collections.singletonList(new Interval(wake, sleep)), blocked,
-                ScheduleModelAdapter.lockedSessions(existing), constraints.productiveWindows,
-                profile.getFocusDuration(), profile.getBreakDuration(), profile.getDailyCapacity());
+                ScheduleModelAdapter.lockedSessions(existing, earliest), constraints.productiveWindows,
+                profile.getFocusDuration(), profile.getBreakDuration(), capacity);
         ScheduleGenerator.Result result = new ScheduleGenerator().generate(request);
-        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result));
+        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result), earliest);
         return result;
     }
 
