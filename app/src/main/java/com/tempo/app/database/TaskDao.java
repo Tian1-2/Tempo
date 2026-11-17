@@ -61,7 +61,7 @@ public class TaskDao {
     public List<Task> getAllTasks() {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
-        try (Cursor cursor = db.query("tasks", null, null, null,
+        try (Cursor cursor = db.query("tasks", null, "status <> ?", new String[]{"DELETED"},
                 null, null, "deadline ASC")) {
             while (cursor.moveToNext()) {
                 tasks.add(cursorToTask(cursor));
@@ -121,5 +121,25 @@ public class TaskDao {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         return db.delete("tasks", "task_id = ?",
                 new String[]{String.valueOf(taskId)});
+    }
+
+    /** Hide a task and release its slots while retaining feedback and learning history. */
+    public int archiveTask(int taskId) {
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            ContentValues task = new ContentValues();
+            task.put("status", "DELETED");
+            int changed = db.update("tasks", task, "task_id=? AND status<>?",
+                    new String[]{String.valueOf(taskId), "DELETED"});
+            if (changed > 0) {
+                ContentValues slot = new ContentValues();
+                slot.put("status", "CANCELLED");
+                db.update("schedule_items", slot, "task_id=? AND status='PLANNED'",
+                        new String[]{String.valueOf(taskId)});
+            }
+            db.setTransactionSuccessful();
+            return changed;
+        } finally { db.endTransaction(); }
     }
 }

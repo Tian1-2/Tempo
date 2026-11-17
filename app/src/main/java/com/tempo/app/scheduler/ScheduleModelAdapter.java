@@ -8,6 +8,7 @@ import com.tempo.app.scheduler.ScheduleGenerator.Session;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Collections;
 
 /** Converts the database teammate's models without coupling the algorithm to SQLite. */
@@ -51,6 +52,19 @@ public final class ScheduleModelAdapter {
                     task.deadlineMillis, task.importance, task.difficulty));
         }
         return result;
+    }
+
+    /** Only manually fixed past slots remain planned after regenerating automatic work. */
+    public static Map<Long, Integer> retainedPastMinutes(List<ScheduleItem> existing, long earliest) {
+        Map<Long, Integer> minutes = new HashMap<>();
+        for (ScheduleItem item : existing) {
+            if ("PLANNED".equals(item.getStatus()) && item.isManuallyEdited()
+                    && item.getStartTime() < earliest) {
+                int duration = (int) ((item.getEndTime() - item.getStartTime()) / 60_000L);
+                minutes.merge((long) item.getTaskId(), duration, Integer::sum);
+            }
+        }
+        return minutes;
     }
 
     public static List<Session> lockedSessions(List<ScheduleItem> existing) { return lockedSessions(existing, Long.MIN_VALUE); }

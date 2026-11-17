@@ -11,6 +11,8 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
+import java.util.HashMap;
 
 import static org.junit.Assert.*;
 
@@ -71,5 +73,85 @@ public class ScheduleIntegrationUnitTest {
         assertEquals(1, blocks.size());
         assertEquals(80, blocks.get(0).shownMinutes(false));
         assertEquals(90, blocks.get(0).shownMinutes(true));
+    }
+
+    @Test public void breakAfterFocusCannotBeFilledByAnotherTask() {
+        ScheduleGenerator.Result result = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
+                new ScheduleGenerator.Interval(0, 24 * 60 * M), 9 * 60 * M,
+                Arrays.asList(new ScheduleGenerator.Task(1, 60, null, 5, 2),
+                        new ScheduleGenerator.Task(2, 45, null, 3, 2)),
+                Collections.singletonList(new ScheduleGenerator.Interval(9 * 60 * M, 13 * 60 * M)),
+                Collections.emptyList(), Collections.emptyList(), Collections.emptyList(),
+                45, 5, 180));
+        assertEquals(3, result.sessions.size());
+        assertEquals(1, result.sessions.get(0).taskId);
+        assertEquals(1, result.sessions.get(1).taskId);
+        assertEquals(2, result.sessions.get(2).taskId);
+        assertEquals(5 * M, result.sessions.get(1).interval.start - result.sessions.get(0).interval.end);
+        assertEquals(5 * M, result.sessions.get(2).interval.start - result.sessions.get(1).interval.end);
+    }
+
+    @Test public void automaticTaskKeepsBreakAroundManualSlot() {
+        ScheduleGenerator.Session locked = new ScheduleGenerator.Session(2,
+                new ScheduleGenerator.Interval(9 * 60 * M, (9 * 60 + 45) * M), true);
+        ScheduleGenerator.Result result = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
+                new ScheduleGenerator.Interval(0, 24 * 60 * M), 9 * 60 * M,
+                Arrays.asList(new ScheduleGenerator.Task(1, 20, null, 5, 2),
+                        new ScheduleGenerator.Task(2, 45, null, 3, 2)),
+                Collections.singletonList(new ScheduleGenerator.Interval(9 * 60 * M, 13 * 60 * M)),
+                Collections.emptyList(), Collections.singletonList(locked), Collections.emptyList(),
+                45, 5, 180));
+        assertEquals(2, result.sessions.size());
+        assertEquals((9 * 60 + 50) * M, result.sessions.get(1).interval.start);
+    }
+
+    @Test public void replanningDoesNotAssignRetainedPastMinutesAgain() {
+        ScheduleItem past = new ScheduleItem();
+        past.setTaskId(1);
+        past.setStartTime(9 * 60 * M);
+        past.setEndTime((9 * 60 + 45) * M);
+        past.setStatus("PLANNED");
+        past.setManuallyEdited(true);
+        ScheduleItem cancelled = new ScheduleItem();
+        cancelled.setTaskId(1);
+        cancelled.setStartTime(10 * 60 * M);
+        cancelled.setEndTime((10 * 60 + 30) * M);
+        cancelled.setStatus("CANCELLED");
+        Map<Long, Integer> retained = ScheduleModelAdapter.retainedPastMinutes(
+                Arrays.asList(past, cancelled), (9 * 60 + 1) * M);
+        assertEquals(Integer.valueOf(45), retained.get(1L));
+        List<ScheduleGenerator.Task> remaining = ScheduleModelAdapter.subtractPlanned(
+                Collections.singletonList(new ScheduleGenerator.Task(1, 60, null, 3, 2)),
+                retained, new HashMap<Long, Integer>());
+        assertEquals(15, remaining.get(0).durationMinutes);
+    }
+
+    @Test public void missedAutomaticSlotIsAvailableForFreshPlanning() {
+        ScheduleItem missed = new ScheduleItem();
+        missed.setTaskId(1);
+        missed.setStartTime(9 * 60 * M);
+        missed.setEndTime((9 * 60 + 45) * M);
+        missed.setStatus("PLANNED");
+        assertTrue(ScheduleModelAdapter.retainedPastMinutes(
+                Collections.singletonList(missed), 10 * 60 * M).isEmpty());
+    }
+
+    @Test public void taskWaitsForWindowThatFitsItsWholeFocusBlock() {
+        ScheduleGenerator.Result result = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
+                new ScheduleGenerator.Interval(0, 24 * 60 * M), 9 * 60 * M,
+                Arrays.asList(new ScheduleGenerator.Task(1, 60, null, 5, 2),
+                        new ScheduleGenerator.Task(2, 10, null, 3, 2)),
+                Collections.singletonList(new ScheduleGenerator.Interval(9 * 60 * M, 12 * 60 * M)),
+                Collections.singletonList(new ScheduleGenerator.Interval((9 * 60 + 15) * M,
+                        (9 * 60 + 30) * M)), Collections.emptyList(), Collections.emptyList(),
+                45, 5, 180));
+        List<ScheduleGenerator.Session> firstTask = new java.util.ArrayList<>();
+        for (ScheduleGenerator.Session session : result.sessions) if (session.taskId == 1) firstTask.add(session);
+        assertEquals(2, firstTask.size());
+        assertEquals((9 * 60 + 30) * M, firstTask.get(0).interval.start);
+        assertEquals(45 * M, firstTask.get(0).interval.end - firstTask.get(0).interval.start);
+        assertEquals(5 * M, firstTask.get(1).interval.start - firstTask.get(0).interval.end);
+        assertEquals(15 * M, firstTask.get(1).interval.end - firstTask.get(1).interval.start);
+        assertEquals(1, ScheduleDisplayBlocks.group(firstTask, Collections.emptyList(), 5).size());
     }
 }

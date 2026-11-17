@@ -28,11 +28,8 @@ import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
 import com.tempo.app.scheduler.AutoScheduler;
-import com.tempo.app.scheduler.DefaultScheduleConstraints;
 import com.tempo.app.scheduler.ScheduleDisplayBlocks;
 import com.tempo.app.scheduler.ScheduleGenerator;
-import com.tempo.app.scheduler.ScheduleService;
-import com.tempo.app.planning.GenerationPreflight;
 import com.tempo.app.planning.ScheduleEditRules;
 import com.tempo.app.ui.TimelineScale;
 
@@ -48,9 +45,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.text.ParseException;
 import java.util.Collections;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Visual prototype for Home + a functional, resumable focus timer. */
 public class SchedulePreviewActivity extends AppCompatActivity {
@@ -72,18 +66,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private FrameLayout timelineCanvas;
     private boolean jumpToTime = true;
     private long pendingJumpDay = Long.MIN_VALUE;
-    private long generatedJumpMillis = Long.MIN_VALUE;
     private long loadSequence;
-    // Single-flight across activity recreation; all scheduling runs off the main thread.
-    private static final AtomicBoolean GENERATING = new AtomicBoolean(false);
-    private static final ExecutorService GENERATION_EXECUTOR = Executors.newSingleThreadExecutor();
     private final Handler timeHandler = new Handler(Looper.getMainLooper());
-    private final Runnable generationPoll = new Runnable() {
-        @Override public void run() {
-            if (GENERATING.get()) timeHandler.postDelayed(this, 300);
-            else if (!isFinishing() && !isDestroyed()) loadData();
-        }
-    };
     private final Runnable timeTick = new Runnable() {
         @Override public void run() { if (content != null) render(); timeHandler.postDelayed(this, 60_000); }
     };
@@ -94,7 +78,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
         RepositoryProvider.init(this);
-        selectedDayMillis = startOfDay(System.currentTimeMillis());
+        selectedDayMillis = startOfDay(getIntent().getLongExtra("selectedDayMillis", System.currentTimeMillis()));
         pendingJumpDay = selectedDayMillis;
         content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -106,13 +90,23 @@ public class SchedulePreviewActivity extends AppCompatActivity {
 
     @Override protected void onResume() {
         super.onResume();
-        if (content != null) loadData();
+        if (content != null) {
+            loadData();
+            if (selectedDayMillis >= startOfDay(System.currentTimeMillis())) {
+                AutoScheduler.replan(this, new AutoScheduler.Listener() {
+                    @Override public void onScheduled(ScheduleGenerator.Result result) {
+                        if (!isFinishing() && !isDestroyed()) loadData();
+                    }
+                    @Override public void onFailed(String error) {
+                        // Existing data remains visible; task and profile save flows show errors.
+                    }
+                });
+            }
+        }
         timeHandler.postDelayed(timeTick, 60_000);
-        if (GENERATING.get()) timeHandler.postDelayed(generationPoll, 300);
     }
     @Override protected void onPause() {
         timeHandler.removeCallbacks(timeTick);
-        timeHandler.removeCallbacks(generationPoll);
         super.onPause();
     }
     @Override protected void onDestroy() {
@@ -120,9 +114,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         super.onDestroy();
     }
 
-    private void loadData() { loadData(false); }
-
-    private void loadData(boolean showFirstSession) {
+    private void loadData() {
         final long requestedDay = selectedDayMillis;
         final long request = ++loadSequence;
         RepositoryProvider.getUserProfileRepository().getProfile(new TaskRepository.Callback<com.tempo.app.model.UserProfile>() {
@@ -152,10 +144,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                         schedule.clear(); schedule.addAll(rows);
                         if (demoData && selectedDayMillis == startOfDay(System.currentTimeMillis())) addDemoSchedule();
                         if (pendingJumpDay == requestedDay) { jumpToTime = true; pendingJumpDay = Long.MIN_VALUE; }
-                        if (showFirstSession && !rows.isEmpty()) {
-                            generatedJumpMillis = rows.get(0).getStartTime();
-                            jumpToTime = true;
-                        }
                         render();
                     }
                     @Override public void onError(Exception error) {
@@ -216,8 +204,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         row.addView(toggle);
         content.addView(row);
         spacer(8);
-        addGenerationAction();
-        spacer(8);
         if (demoData && !schedule.isEmpty()) {
             TextView demo = label("Sample schedule · preview only, not saved", 12, MUTED, false);
             demo.setPadding(dp(22), 0, dp(22), 0);
@@ -253,158 +239,30 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         }
         summary.setText(finished + "/" + dayTaskIds.size());
         List<ScheduleDisplayBlocks.Block> blocks = ScheduleDisplayBlocks.group(sessions,
-                new ArrayList<ScheduleGenerator.Interval>(), 0);
+                new ArrayList<ScheduleGenerator.Interval>(), focusBreakMinutes);
         addTimeline(blocks, byId);
         if (sessions.isEmpty()) {
             spacerIn(timelineBody, 14);
-            timelineBody.addView(label("Nothing planned for this day yet. Tasks appear here once a plan is generated.", 13, MUTED, false));
+            timelineBody.addView(label("Nothing planned for this day yet. Add a task to get a suggested time.", 13, MUTED, false));
         }
         spacerIn(timelineBody, 26);
         timelineBody.addView(label("TEMPO  ·  FIND YOUR RHYTHM", 11, MUTED, true));
         addBottomBar();
         final int restoreY = previousScroll;
         final boolean jump = jumpToTime;
-        final long generatedTarget = generatedJumpMillis;
-        generatedJumpMillis = Long.MIN_VALUE;
         jumpToTime = false;
         ScrollView newScroll = timelineScroll;
         newScroll.post(() -> {
             if (newScroll != timelineScroll) return;
             if (jump) {
                 Calendar target = Calendar.getInstance();
-                if (generatedTarget != Long.MIN_VALUE) target.setTimeInMillis(generatedTarget);
-                else if (selectedDayMillis == startOfDay(System.currentTimeMillis())) target.setTimeInMillis(System.currentTimeMillis());
+                if (selectedDayMillis == startOfDay(System.currentTimeMillis())) target.setTimeInMillis(System.currentTimeMillis());
                 else { target.setTimeInMillis(selectedDayMillis); target.set(Calendar.HOUR_OF_DAY, 8); target.set(Calendar.MINUTE, 0); }
                 int minute = target.get(Calendar.HOUR_OF_DAY) * 60 + target.get(Calendar.MINUTE);
                 int y = timelineCanvas.getTop() + dp(12) + Math.round(timelineScale.y(minute));
                 newScroll.scrollTo(0, Math.max(0, y - newScroll.getHeight() / 2));
             } else if (restoreY >= 0) newScroll.scrollTo(0, restoreY);
         });
-    }
-
-    private void addGenerationAction() {
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setPadding(dp(22), 0, dp(22), 0);
-        TextView hint = label(schedule.isEmpty() ? "Generate a plan, then start focusing" : "Plan for the selected day", 12, MUTED, false);
-        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(0, -2, 1);
-        hintParams.rightMargin = dp(12);
-        actions.addView(hint, hintParams);
-        TextView generate = label(GENERATING.get() ? "Generating…" : "Generate plan", 14, INK, true);
-        generate.setGravity(Gravity.CENTER);
-        generate.setPadding(dp(16), dp(12), dp(16), dp(12));
-        generate.setMinHeight(dp(48));
-        generate.setBackground(shape(MINT, 99)); // pill, like chips on the home page
-        generate.setEnabled(!GENERATING.get());
-        generate.setAlpha(GENERATING.get() ? .5f : 1f);
-        generate.setOnClickListener(v -> requestGeneration());
-        actions.addView(generate, new LinearLayout.LayoutParams(-2, -2));
-        content.addView(actions);
-    }
-
-    private void requestGeneration() {
-        if (GENERATING.get()) return;
-        final long requestedDay = selectedDayMillis;
-        try {
-            GenerationPreflight.checkDate(requestedDay, startOfDay(System.currentTimeMillis()));
-        } catch (GenerationPreflight.Problem problem) { showGenerationProblem(problem); return; }
-        if (getSharedPreferences("tempo_focus_timer", MODE_PRIVATE).getInt("taskId", Integer.MIN_VALUE) != Integer.MIN_VALUE) {
-            showGenerationProblem(new GenerationPreflight.Problem("Finish the running focus timer before generating a plan.", GenerationPreflight.Action.NONE));
-            return;
-        }
-        new AlertDialog.Builder(this).setTitle("Plan the next " + ScheduleService.HORIZON_DAYS + " days")
-                .setMessage("Plans your pending and in-progress tasks from today on, using your saved routine, remaining time and daily task time. Work that does not fit today continues on the following days. Each meal keeps 30 minutes free; fixed events such as classes are not included yet.\n\nRegenerating replaces automatic slots that have not started. Past, manually adjusted and completed slots are kept.")
-                .setNegativeButton("Cancel", null)
-                .setPositiveButton("Generate", (dialog, which) -> generateForDay(requestedDay)).show();
-    }
-
-    private void generateForDay(long requestedDay) {
-        if (!GENERATING.compareAndSet(false, true)) return;
-        render();
-        final String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(requestedDay));
-        GENERATION_EXECUTOR.execute(() -> {
-            try {
-                // Read fresh data: never schedule the negative-ID preview tasks in the UI.
-                GenerationPreflight.checkDate(requestedDay, startOfDay(System.currentTimeMillis()));
-                List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
-                GenerationPreflight.check(RepositoryProvider.getUserProfileRepository().getProfileSync(), pending);
-                // Same multi-day planning and constraints as auto-scheduling (meal blocks, productive window).
-                ScheduleGenerator.Result result = new ScheduleService().generateRange(
-                        ScheduleService.HORIZON_DAYS, new DefaultScheduleConstraints());
-                GENERATING.set(false);
-                timeHandler.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    selectedDayMillis = requestedDay;
-                    schedule.clear();
-                    pendingJumpDay = requestedDay;
-                    loadData(true);
-                    showGenerationResult("Next " + ScheduleService.HORIZON_DAYS + " days", result, pending);
-                });
-            } catch (Exception error) {
-                GENERATING.set(false);
-                timeHandler.post(() -> {
-                    if (isFinishing() || isDestroyed()) return;
-                    render();
-                    showGenerationProblem(error);
-                });
-            }
-        });
-    }
-
-    private void showGenerationResult(String date, ScheduleGenerator.Result result, List<Task> pending) {
-        Map<Long, String> names = new HashMap<>();
-        for (Task task : pending) names.put((long) task.getTaskId(), task.getTitle());
-        Set<Long> arrangedTasks = new HashSet<>();
-        long totalMinutes = 0;
-        for (ScheduleGenerator.Session session : result.sessions) {
-            arrangedTasks.add(session.taskId);
-            totalMinutes += (session.interval.end - session.interval.start) / 60_000L;
-        }
-        StringBuilder message = new StringBuilder(date).append("\n\n");
-        if (result.sessions.isEmpty()) message.append("No suitable free time was found.\n");
-        else message.append("Planned ").append(arrangedTasks.size()).append(arrangedTasks.size() == 1 ? " task, " : " tasks, ")
-                .append(totalMinutes).append(" min in ").append(result.sessions.size()).append(result.sessions.size() == 1 ? " block.\n" : " blocks.\n")
-                .append("Tap a task on the timeline to start focusing.\n");
-        if (!result.unscheduledTasks.isEmpty()) {
-            message.append("\nNot fully planned:\n");
-            int shown = 0;
-            for (ScheduleGenerator.UnscheduledTask task : result.unscheduledTasks) {
-                if (shown++ >= 8) { message.append("…and ").append(result.unscheduledTasks.size() - 8).append(" more.\n"); break; }
-                message.append("• ").append(names.getOrDefault(task.taskId, "Task " + task.taskId))
-                        .append(": ").append(task.remainingMinutes).append(" min left (")
-                        .append(task.reason == ScheduleGenerator.Reason.DEADLINE ? "not enough time before the deadline" : "not enough free time in the next " + ScheduleService.HORIZON_DAYS + " days")
-                        .append(")\n");
-            }
-            message.append("\nCheck task deadlines and your profile. A short task without a deadline is the easiest way to test.");
-        }
-        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
-                .setTitle(result.sessions.isEmpty() ? "Nothing planned yet" : "Plan ready")
-                .setMessage(message.toString()).setPositiveButton("Got it", null);
-        if (result.sessions.isEmpty()) dialog.setNeutralButton("Add task", (d, which) -> addTaskForSelectedDay());
-        dialog.show();
-    }
-
-    private void showGenerationProblem(Exception error) {
-        GenerationPreflight.Action action = error instanceof GenerationPreflight.Problem
-                ? ((GenerationPreflight.Problem) error).action : GenerationPreflight.Action.NONE;
-        String message = error instanceof GenerationPreflight.Problem ? error.getMessage()
-                : "Check the task details, your profile and any manually locked slots for conflicts.\n\nDetails: " + error.getMessage();
-        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("Could not generate a plan")
-                .setMessage(message).setNegativeButton("Close", null);
-        if (action == GenerationPreflight.Action.PROFILE) {
-            dialog.setPositiveButton("Open profile", (d, which) -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
-        } else if (action == GenerationPreflight.Action.ADD_TASK) {
-            dialog.setPositiveButton("Add task", (d, which) -> addTaskForSelectedDay());
-        } else if (action == GenerationPreflight.Action.TODAY) {
-            dialog.setPositiveButton("Back to today", (d, which) -> {
-                selectedDayMillis = startOfDay(System.currentTimeMillis());
-                pendingJumpDay = selectedDayMillis;
-                jumpToTime = true;
-                schedule.clear();
-                render(); loadData();
-            });
-        }
-        dialog.show();
     }
 
     private void addWeekStrip() {
@@ -581,7 +439,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         for (int i = 1; i < ordered.size(); i++) {
             ScheduleGenerator.Session before = ordered.get(i - 1), after = ordered.get(i);
             long gap = after.interval.start - before.interval.end;
-            if (before.taskId == after.taskId && gap > 0 && gap <= focusBreakMinutes * 60_000L) {
+            if (gap > 0 && gap <= focusBreakMinutes * 60_000L) {
                 rest.add(new ScheduleGenerator.Interval(before.interval.end, after.interval.start));
             }
         }
@@ -726,12 +584,45 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         start.setEnabled(!"COMPLETED".equals(task.getStatus()));
         start.setOnClickListener(v -> { detail.dismiss(); openTimer(task); });
         body.addView(start);
+        if (task.getTaskId() > 0) {
+            TextView delete = label("Delete task", 14, Color.rgb(170, 65, 55), false);
+            delete.setGravity(Gravity.CENTER);
+            delete.setOnClickListener(v -> { detail.dismiss(); confirmDeleteTask(task); });
+            body.addView(delete, new LinearLayout.LayoutParams(-1, dp(48)));
+        }
         TextView close = label("Close", 14, MUTED, false);
         close.setGravity(Gravity.CENTER);
         close.setOnClickListener(v -> detail.dismiss());
         body.addView(close, new LinearLayout.LayoutParams(-1, dp(44)));
         detail.show();
         if (detail.getWindow() != null) detail.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+    }
+
+    private void confirmDeleteTask(Task task) {
+        if (getSharedPreferences(FocusSessionState.PREFS, MODE_PRIVATE)
+                .getInt("taskId", Integer.MIN_VALUE) == task.getTaskId()) {
+            Toast.makeText(this, "Finish this task's focus session before deleting it.", Toast.LENGTH_LONG).show();
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Delete task?")
+                .setMessage("Remove “" + task.getTitle() + "” and its planned times? Recorded focus history will be kept.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete task", (dialog, which) ->
+                        RepositoryProvider.getTaskRepository().archiveTask(task.getTaskId(), new TaskRepository.Callback<Integer>() {
+                            @Override public void onSuccess(Integer rows) {
+                                if (rows == null || rows == 0) { loadData(); return; }
+                                AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
+                                    @Override public void onScheduled(ScheduleGenerator.Result result) { loadData(); }
+                                    @Override public void onFailed(String error) {
+                                        Toast.makeText(SchedulePreviewActivity.this, error, Toast.LENGTH_LONG).show();
+                                        loadData();
+                                    }
+                                });
+                            }
+                            @Override public void onError(Exception error) {
+                                Toast.makeText(SchedulePreviewActivity.this, "Could not delete task: " + error.getMessage(), Toast.LENGTH_LONG).show();
+                            }
+                        })).show();
     }
 
     private String categoryName(String category) {
@@ -853,7 +744,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         LinearLayout body = panel(WHITE);
         body.addView(label("Adjust time slot", 21, INK, true));
         spacerIn(body, 7);
-        body.addView(label("Type 24-hour times. Saving locks this slot so re-planning keeps it.", 13, MUTED, false));
+        body.addView(label("Scroll to choose a time. Saving locks this slot so re-planning keeps it.", 13, MUTED, false));
         spacerIn(body, 18);
         EditText startField = timeInput("Start HH:mm", clock(item.getStartTime()));
         EditText endField = timeInput("End HH:mm", clock(item.getEndTime()));
@@ -895,7 +786,16 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(selectedDayMillis));
                 RepositoryProvider.getScheduleRepository().updatePlannedTime(item.getScheduleId(), date, start, end,
                         new TaskRepository.Callback<Integer>() {
-                            @Override public void onSuccess(Integer rows) { dialog.dismiss(); loadData(); }
+                            @Override public void onSuccess(Integer rows) {
+                                dialog.dismiss();
+                                AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
+                                    @Override public void onScheduled(ScheduleGenerator.Result result) { loadData(); }
+                                    @Override public void onFailed(String error) {
+                                        Toast.makeText(SchedulePreviewActivity.this, error, Toast.LENGTH_LONG).show();
+                                        loadData();
+                                    }
+                                });
+                            }
                             @Override public void onError(Exception error) { showEditError(error.getMessage()); }
                         });
             }
@@ -910,6 +810,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         field.setTextSize(16); field.setTextColor(INK);
         field.setPadding(dp(14), 0, dp(14), 0);
         field.setInputType(InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME);
+        field.setFocusable(false);
+        field.setOnClickListener(v -> WheelPickers.pickTime(this, field, hint.startsWith("End")));
         field.setBackground(shape(BG, 12));
         field.setSelectAllOnFocus(true);
         return field;

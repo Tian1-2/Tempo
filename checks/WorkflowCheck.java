@@ -17,7 +17,7 @@ public final class WorkflowCheck {
         TimeZone.setDefault(TimeZone.getTimeZone("Asia/Shanghai"));
         try(AppDatabaseHelper h=new AppDatabaseHelper(new Context())) {
             helper=h;store=new LearningStore(h);db=h.getWritableDatabase();
-            remainingAndCorrections();completionReleasesPlans();scopeEdits();untimedAndManual();timingAndReceipts();migration();
+            remainingAndCorrections();completionReleasesPlans();scopeEdits();untimedAndManual();timingAndReceipts();migration();archiveWholeTask();
         }
         System.out.println("PASS: "+count+" workflow assertions using production LearningStore/DAOs and real SQLite.");
     }
@@ -63,6 +63,21 @@ public final class WorkflowCheck {
         check(!com.tempo.app.planning.ScheduleEditRules.overlaps(displayed,editing,NOW+30*M,NOW+50*M),"page precheck permits moving into cancelled time before the DAO is called");
         check(new ScheduleDao(helper).updatePlannedTime((int)moved,"2026-11-17",NOW+30*M,NOW+50*M)==1,"manual move can occupy released future time");
         check(result.totalMinutes==5,"scheduled durations are not counted as actual work");
+    }
+    private static void archiveWholeTask() {
+        Task task=task("Archived task",60);
+        store.prepare(task.getTaskId(),NOW);
+        save("archive-feedback",task,5,false,null,NOW+M);
+        long first=block(task,NOW+30*M,NOW+60*M,false);
+        long second=block(task,NOW+90*M,NOW+120*M,true);
+        TaskDao dao=new TaskDao(helper);
+        check(dao.archiveTask(task.getTaskId())==1,"whole task archived once");
+        check("DELETED".equals(dao.getTaskById(task.getTaskId()).getStatus()),"archived task row retained");
+        check(dao.getAllTasks().stream().noneMatch(t->t.getTaskId()==task.getTaskId()),"archived task hidden from normal task list");
+        check("CANCELLED".equals(string("SELECT status FROM schedule_items WHERE schedule_id="+first)),"generated slot released");
+        check("CANCELLED".equals(string("SELECT status FROM schedule_items WHERE schedule_id="+second)),"manual slot released");
+        check(number("SELECT COUNT(*) FROM task_feedback WHERE task_id="+task.getTaskId())==1,"recorded feedback retained");
+        check(dao.archiveTask(task.getTaskId())==0,"repeat archive is harmless");
     }
     private static void scopeEdits() {
         Task task=task("Change workload",60);store.prepare(task.getTaskId(),NOW);

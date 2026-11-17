@@ -151,6 +151,16 @@ public final class ScheduleGenerator {
             long cursor = Math.max(request.day.start, request.earliestStartMillis);
             long deadline = task.deadlineMillis == null ? request.day.end
                     : Math.min(request.day.end, Math.floorDiv(task.deadlineMillis, MINUTE) * MINUTE);
+            // Prefer one continuous task block, with its focus breaks inside it. A short
+            // opening before a longer free window must not fragment the task unnecessarily.
+            if (remaining > 0 && remaining <= request.maxTaskMinutes - used) {
+                int breaks = (remaining - 1) / request.focusMinutes;
+                long blockMinutes = (long) remaining + (long) breaks * request.breakMinutes;
+                List<Interval> free = freeWindows(request, sessions, task.id, cursor, deadline);
+                Interval wholeBlock = chooseWindowAtLeast(free, request.productiveWindows,
+                        task.difficulty, blockMinutes);
+                if (wholeBlock != null) cursor = wholeBlock.start;
+            }
             while (remaining > 0 && used < request.maxTaskMinutes && cursor < deadline) {
                 List<Interval> free = freeWindows(request, sessions, task.id, cursor, deadline);
                 Interval chosen = chooseWindow(free, request.productiveWindows, task.difficulty);
@@ -204,11 +214,11 @@ public final class ScheduleGenerator {
         }
         for (Interval blocked : r.blockedIntervals) free = subtract(free, blocked);
         for (Session session : occupied) {
-            free = subtract(free, session.interval);
-            if (session.taskId == taskId && r.breakMinutes > 0) {
-                long padding = r.breakMinutes * MINUTE;
-                free = subtract(free, new Interval(session.interval.start - padding, session.interval.end + padding));
-            }
+            // A break is free time for the person, not merely a gap in one task.
+            // Keep newly generated work away from both sides of every session, including locked ones.
+            long padding = r.breakMinutes * MINUTE;
+            free = subtract(free, padding == 0 ? session.interval
+                    : new Interval(session.interval.start - padding, session.interval.end + padding));
         }
         free.sort(Comparator.comparingLong(i -> i.start));
         return free;
@@ -236,6 +246,21 @@ public final class ScheduleGenerator {
             if (best != null) return best;
         }
         return free.get(0);
+    }
+
+    private static Interval chooseWindowAtLeast(List<Interval> free, List<Interval> productive,
+                                                int difficulty, long requiredMinutes) {
+        if (difficulty >= 4) {
+            Interval best = null;
+            for (Interval f : free) for (Interval p : productive) {
+                long start = Math.max(f.start, p.start), end = Math.min(f.end, p.end);
+                if (end - start >= requiredMinutes * MINUTE
+                        && (best == null || start < best.start)) best = new Interval(start, end);
+            }
+            if (best != null) return best;
+        }
+        for (Interval f : free) if (f.end - f.start >= requiredMinutes * MINUTE) return f;
+        return null;
     }
 
     private static boolean containedInAny(Interval value, List<Interval> windows) {

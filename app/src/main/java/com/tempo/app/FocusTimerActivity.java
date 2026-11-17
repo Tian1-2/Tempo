@@ -139,6 +139,10 @@ public class FocusTimerActivity extends AppCompatActivity {
         toggle = action("Start focus", INK, false);
         toggle.setTextColor(Color.WHITE); // app-wide primary action: dark button, white text
         toggle.setOnClickListener(v -> {
+            if (FocusSessionState.isFromEarlierDay(prefs(), System.currentTimeMillis())) {
+                reviewPreviousDaySession();
+                return;
+            }
             if (isRunning()) pause(); else start();
             refresh();
         });
@@ -168,6 +172,7 @@ public class FocusTimerActivity extends AppCompatActivity {
                     @Override public void onError(Exception error) { }
                 });
         refresh();
+        handler.post(this::reviewPreviousDaySession);
     }
 
     @Override protected void onDestroy() { handler.removeCallbacksAndMessages(null); if (learning != null) learning.close(); super.onDestroy(); }
@@ -202,6 +207,7 @@ public class FocusTimerActivity extends AppCompatActivity {
     private void beginClock() {
         SharedPreferences.Editor editor = prefs().edit().putInt("taskId", taskId).putLong("started", SystemClock.elapsedRealtime())
                 .putLong("startedWall",System.currentTimeMillis());
+        if (!prefs().contains("sessionStartWall")) editor.putLong("sessionStartWall", System.currentTimeMillis());
         if(!prefs().contains("timingTrusted")) editor.putBoolean("timingTrusted",prefs().getLong("elapsed",0)==0);
         if (prefs().getString("sessionToken", null) == null) editor.putString("sessionToken", UUID.randomUUID().toString());
         editor.commit();
@@ -218,6 +224,40 @@ public class FocusTimerActivity extends AppCompatActivity {
             } else edit.putBoolean("timingTrusted",false);
         }
         edit.putLong("elapsed",elapsedAtPause).putLong("started",0).putLong("startedWall",0).commit();
+    }
+    private void reviewPreviousDaySession() {
+        SharedPreferences state = prefs();
+        if (!FocusSessionState.isFromEarlierDay(state, System.currentTimeMillis()) || isFinishing()) return;
+        if (FocusSessionState.isRunning(state)) pause();
+        int previousTask = state.getInt("taskId", Integer.MIN_VALUE);
+        if (previousTask != taskId) {
+            new AlertDialog.Builder(this).setTitle("Previous focus session")
+                    .setMessage("A session from an earlier day is still open. Review or discard it before starting another timer. You can still add and plan tasks.")
+                    .setPositiveButton("Open previous timer", (dialog, which) ->
+                            RepositoryProvider.getTaskRepository().getTaskById(previousTask,
+                                    new TaskRepository.Callback<com.tempo.app.model.Task>() {
+                                        @Override public void onSuccess(com.tempo.app.model.Task task) {
+                                            if (task == null) return;
+                                            Intent intent = new Intent(FocusTimerActivity.this, FocusTimerActivity.class);
+                                            intent.putExtra("taskId", task.getTaskId());
+                                            intent.putExtra("title", task.getTitle());
+                                            startActivity(intent);
+                                            finish();
+                                        }
+                                        @Override public void onError(Exception error) { }
+                                    }))
+                    .setNegativeButton("Later", (dialog, which) -> finish()).show();
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle("Previous focus session")
+                .setMessage("This timer was started on an earlier day. Review its recorded time before saving, or discard the session. It will not resume automatically.")
+                .setPositiveButton("Finish and review", (dialog, which) -> finishSession())
+                .setNeutralButton("Discard session", (dialog, which) -> {
+                    clear();
+                    com.tempo.app.scheduler.AutoScheduler.replan(this, null);
+                    finish();
+                })
+                .setNegativeButton("Later", (dialog, which) -> finish()).show();
     }
     private void refresh() {
         long savedStart=prefs().getLong("started",0),savedWall=prefs().getLong("startedWall",0);

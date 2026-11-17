@@ -61,9 +61,13 @@ public final class ScheduleService {
         long earliest = Math.max(day.start, Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE);
         if (day.start > now) earliest = day.start;
         for (ScheduleItem item : existing) {
-            if ("CANCELLED".equals(item.getStatus())) continue;
+            if ("CANCELLED".equals(item.getStatus())
+                    || ("PLANNED".equals(item.getStatus()) && !item.isManuallyEdited())) continue;
             if ("COMPLETED".equals(item.getStatus()) || "SKIPPED".equals(item.getStatus()) || item.getStartTime() < earliest) {
-                blocked.add(new Interval(item.getStartTime(), item.getEndTime()));
+                // Completed and manual past slots remain; reserve their following break too.
+                long endWithBreak = Math.min(day.end,
+                        item.getEndTime() + profile.getBreakDuration() * MINUTE);
+                blocked.add(new Interval(item.getStartTime(), endWithBreak));
             }
         }
         List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
@@ -73,16 +77,22 @@ public final class ScheduleService {
                 new String[]{String.valueOf(day.start), String.valueOf(day.end), String.valueOf(now)})) {
             if (c.moveToFirst()) usedToday = c.getLong(0);
         }
+        Map<Long, Integer> retainedPastMinutes = ScheduleModelAdapter.retainedPastMinutes(existing, earliest);
+        for (int minutes : retainedPastMinutes.values()) usedToday += minutes;
         int capacity = (int) Math.max(0, profile.getDailyCapacity() - usedToday);
         List<ScheduleGenerator.Session> lockedHere = ScheduleModelAdapter.lockedSessions(existing, earliest);
         Map<Long, Integer> lockedMinutes = new HashMap<>();
         for (ScheduleGenerator.Session s : lockedHere) {
             lockedMinutes.merge(s.taskId, (int) ((s.interval.end - s.interval.start) / MINUTE), Integer::sum);
         }
-        // Work already planned on other dates is not planned again here (multi-day planning).
+        // Retained manual slots and work on other dates are already planned.
+        Map<Long, Integer> alreadyPlanned = plannedOnOtherDates(date, now);
+        for (Map.Entry<Long, Integer> entry : retainedPastMinutes.entrySet()) {
+            alreadyPlanned.merge(entry.getKey(), entry.getValue(), Integer::sum);
+        }
         List<ScheduleGenerator.Task> tasks = ScheduleModelAdapter.subtractPlanned(
                 ScheduleModelAdapter.pendingTasks(pending, learning.remaining(pending, profile.getFocusDuration())),
-                plannedOnOtherDates(date, now), lockedMinutes);
+                alreadyPlanned, lockedMinutes);
         Set<Long> pendingIds = new HashSet<>();
         for (ScheduleGenerator.Task task : tasks) pendingIds.add(task.id);
         List<ScheduleGenerator.Session> locked = new ArrayList<>();
@@ -97,7 +107,7 @@ public final class ScheduleService {
                 locked, constraints.productiveWindows,
                 profile.getFocusDuration(), profile.getBreakDuration(), capacity);
         ScheduleGenerator.Result result = new ScheduleGenerator().generate(request);
-        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result), earliest);
+        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result), Long.MIN_VALUE);
         return result;
     }
 
@@ -105,15 +115,14 @@ public final class ScheduleService {
     public static final int HORIZON_DAYS = 7;
 
     /**
-     * Plans today and the following days. Automatic slots that have not started are cleared first,
+     * Plans today and the following days. Incomplete automatic slots are cleared first,
      * then each day is generated in order; every day only plans what earlier days left over, so a
      * task that does not fit today continues tomorrow instead of being planned twice. Manually
-     * adjusted, past and completed slots are kept. Call off the UI thread.
+     * adjusted and completed slots are kept. Call off the UI thread.
      */
     public ScheduleGenerator.Result generateRange(int days, ScheduleConstraintsProvider provider) {
         if (days < 1) throw new IllegalArgumentException("days must be at least 1");
         long now = System.currentTimeMillis();
-        long earliestToday = Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE;
         Calendar cursor = Calendar.getInstance();
         cursor.setTimeInMillis(now);
         List<String> dates = new ArrayList<>();
@@ -124,8 +133,7 @@ public final class ScheduleService {
         }
         ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
         for (int i = 0; i < dates.size(); i++) {
-            schedules.replaceGeneratedForDateSync(dates.get(i), Collections.<ScheduleItem>emptyList(),
-                    i == 0 ? earliestToday : Long.MIN_VALUE);
+            schedules.replaceGeneratedForDateSync(dates.get(i), Collections.<ScheduleItem>emptyList(), Long.MIN_VALUE);
         }
         List<ScheduleGenerator.Result> results = new ArrayList<>();
         for (String date : dates) {

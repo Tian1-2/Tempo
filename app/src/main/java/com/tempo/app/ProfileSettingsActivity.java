@@ -51,12 +51,15 @@ public class ProfileSettingsActivity extends AppCompatActivity {
     private LinearLayout body;
     private TextView save;
     private DayStripView strip;
+    private LinearLayout dayCard;
     private TextView summary;
+    private TextView profileState, recommended;
+    private String planningFailure;
     private Field wake, sleep, breakfast, lunch, dinner, start, focus, rest, capacity;
 
-    /** One slider + text input pair. Values are minutes (time of day or a duration). */
+    /** One slider + text input pair. Stored values are minutes; daily capacity is shown in hours. */
     private final class Field {
-        final boolean time;
+        final boolean time, hours;
         final int min, max, step;
         int value;
         EditText input;
@@ -64,11 +67,19 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         boolean syncing;
 
         Field(boolean time, int min, int max, int step, int value) {
-            this.time = time; this.min = min; this.max = max; this.step = step; this.value = value;
+            this(time, false, min, max, step, value);
+        }
+
+        Field(boolean time, boolean hours, int min, int max, int step, int value) {
+            this.time = time; this.hours = hours;
+            this.min = min; this.max = max; this.step = step; this.value = value;
         }
 
         String format(int minutes) {
-            return time ? String.format(Locale.US, "%02d:%02d", minutes / 60, minutes % 60) : String.valueOf(minutes);
+            if (time) return String.format(Locale.US, "%02d:%02d", minutes / 60, minutes % 60);
+            if (hours) return minutes % 60 == 0 ? String.valueOf(minutes / 60)
+                    : String.format(Locale.US, "%.2f", minutes / 60.0).replaceAll("0+$", "").replaceAll("\\.$", "");
+            return String.valueOf(minutes);
         }
 
         /** Parses typed text; returns null when it is not a valid value. */
@@ -81,8 +92,13 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 int m = Integer.parseInt(t.substring(colon + 1));
                 return h <= 23 && m <= 59 ? h * 60 + m : null;
             }
-            if (!t.matches("\\d{1,4}")) return null;
-            int v = Integer.parseInt(t);
+            if (!t.matches(hours ? "\\d{1,2}(?:\\.\\d{1,2})?" : "\\d{1,4}")) return null;
+            int v;
+            if (hours) {
+                double minutes = Double.parseDouble(t) * 60;
+                v = (int) Math.round(minutes);
+                if (Math.abs(minutes - v) > 0.000001 || v % step != 0) return null;
+            } else v = Integer.parseInt(t);
             return v >= min && v <= max ? v : null;
         }
 
@@ -125,12 +141,21 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         navigation.addView(backLabel);
         body.addView(navigation, new LinearLayout.LayoutParams(-1, dp(44)));
         space(body, 6);
-        body.addView(text("Your rhythm", 30, INK, true));
+        TextView heading = text("Your rhythm", 30, INK, true);
+        body.addView(heading);
         space(body, 4);
         body.addView(text("Tempo plans your day around these. Drag a slider or tap a value to type it.", 14, MUTED, false));
         space(body, 18);
 
-        LinearLayout dayCard = card();
+        profileState = text("Loading your routine…", 14, MUTED, false);
+        body.addView(profileState);
+        recommended = Ui.secondary(this, "Use recommended routine");
+        recommended.setOnClickListener(v -> useRecommendedRoutine());
+        recommended.setVisibility(View.GONE);
+        body.addView(recommended);
+        space(body, 16);
+
+        dayCard = card();
         dayCard.setPadding(dp(16), dp(16), dp(16), dp(16));
         dayCard.addView(eyebrow("YOUR DAY"));
         space(dayCard, 12);
@@ -159,7 +184,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         start = new Field(true, 0, 1435, 5, 9 * 60);
         focus = new Field(false, 5, 120, 5, 25);
         rest = new Field(false, 0, 30, 1, 5);
-        capacity = new Field(false, 30, 720, 15, 240);
+        capacity = new Field(false, true, 30, 720, 15, 240);
 
         section("ROUTINE");
         LinearLayout routine = card();
@@ -179,20 +204,13 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         addField(focusCard, start, "Best focus time", "Hard tasks go into the " + DefaultScheduleConstraints.PRODUCTIVE_MINUTES / 60 + " h after this", null);
         addField(focusCard, focus, "Focus session", "One block of deep work", "min");
         addField(focusCard, rest, "Break", "Rest between focus blocks", "min");
-        addField(focusCard, capacity, "Daily task time", "Most Tempo will plan per day", "min");
+        addField(focusCard, capacity, "Daily task time", "Most Tempo will plan per day", "h");
         body.addView(focusCard);
 
-        section("DEMO");
-        LinearLayout demo = card();
-        demo.setPadding(dp(16), dp(16), dp(16), dp(16));
-        demo.addView(text("Sample data", 15, INK, true));
-        Ui.space(demo, 4);
-        demo.addView(text("Fill an empty app with a week of tasks, focus sessions and today's plan, to see every page with data.", 12, MUTED, false));
-        Ui.space(demo, 12);
-        TextView sample = Ui.secondary(this, "Load sample data");
-        sample.setOnClickListener(v -> confirmSampleData());
-        demo.addView(sample);
-        body.addView(demo);
+        // Demo seeding is available only through a hidden debug gesture.
+        if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
+            heading.setOnLongClickListener(v -> { confirmSampleData(); return true; });
+        }
 
         save = text("Save", 16, Color.WHITE, true);
         save.setGravity(Gravity.CENTER);
@@ -209,8 +227,17 @@ public class ProfileSettingsActivity extends AppCompatActivity {
 
         RepositoryProvider.getUserProfileRepository().getProfile(new TaskRepository.Callback<UserProfile>() {
             @Override public void onSuccess(UserProfile value) {
-                profile = value == null ? new UserProfile() : value;
-                if (value == null) return;
+                profile = value;
+                if (value == null) {
+                    profileState.setText("No routine saved yet. Enter your own values or apply a recommended starting point, then save to enable planning.");
+                    recommended.setVisibility(View.VISIBLE);
+                    save.setText("Save routine");
+                    refreshSummary();
+                    return;
+                }
+                profileState.setText("Your saved routine · edit any value below.");
+                recommended.setVisibility(View.GONE);
+                save.setText("Save changes");
                 load(wake, value.getWakeTime()); load(sleep, value.getSleepTime());
                 load(breakfast, value.getBreakfastTime()); load(lunch, value.getLunchTime());
                 load(dinner, value.getDinnerTime()); load(start, value.getPreferredStartTime());
@@ -227,6 +254,15 @@ public class ProfileSettingsActivity extends AppCompatActivity {
     private void load(Field field, String hhmm) {
         Integer minutes = hhmm == null ? null : field.parse(hhmm);
         if (minutes != null) field.set(minutes, true);
+    }
+
+    private void useRecommendedRoutine() {
+        wake.set(7 * 60, true); sleep.set(23 * 60 + 30, true);
+        breakfast.set(8 * 60, true); lunch.set(12 * 60 + 30, true);
+        dinner.set(18 * 60 + 30, true); start.set(9 * 60, true);
+        focus.set(25, true); rest.set(5, true); capacity.set(240, true);
+        profileState.setText("Recommended values applied · review them, then tap Save routine.");
+        refreshSummary();
     }
 
     private void addField(LinearLayout card, Field field, String label, String hint, String unit) {
@@ -262,11 +298,14 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         input.setTextSize(15);
         input.setTextColor(GREEN);
         input.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        input.setMinWidth(dp(field.time ? 52 : 34));
+        input.setMinWidth(dp(field.time ? 52 : field.hours ? 44 : 34));
         input.setInputType(field.time ? InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_TIME
+                : field.hours ? InputType.TYPE_CLASS_NUMBER | InputType.TYPE_NUMBER_FLAG_DECIMAL
                 : InputType.TYPE_CLASS_NUMBER);
         input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        input.setText(field.format(field.value));
+        input.setHint("e.g. " + field.format(field.value));
+        input.setHintTextColor(MUTED);
+        input.setText("");
         chip.addView(input);
         if (unit != null) {
             TextView unitView = text(" " + unit, 13, GREEN, true);
@@ -289,6 +328,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         field.input = input;
         field.bar = bar;
         field.set(field.value, false);
+        bar.setProgress(0);
 
         bar.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
             @Override public void onProgressChanged(SeekBar seekBar, int progress, boolean fromUser) {
@@ -313,7 +353,8 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         });
         input.setOnFocusChangeListener((v, hasFocus) -> {
             // On leaving the field, show the last valid value again in its canonical form.
-            if (!hasFocus && field.parse(input.getText().toString()) == null) {
+            if (!hasFocus && !input.getText().toString().trim().isEmpty()
+                    && field.parse(input.getText().toString()) == null) {
                 field.syncing = true;
                 input.setText(field.format(field.value));
                 field.syncing = false;
@@ -323,6 +364,13 @@ public class ProfileSettingsActivity extends AppCompatActivity {
 
     private void refreshSummary() {
         if (summary == null || capacity == null || capacity.bar == null) return;
+        Field[] all = {wake, sleep, breakfast, lunch, dinner, start, focus, rest, capacity};
+        for (Field field : all) if (field == null || field.input == null
+                || field.parse(field.input.getText().toString()) == null) {
+            dayCard.setVisibility(View.GONE);
+            return;
+        }
+        dayCard.setVisibility(View.VISIBLE);
         int awake = sleep.value - wake.value;
         summary.setText(awake > 0
                 ? DailyReview.formatMinutes(awake) + " awake · up to " + DailyReview.formatMinutes(capacity.value)
@@ -338,7 +386,9 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         for (Field f : all) {
             if (f.parse(f.input.getText().toString()) == null) {
                 f.input.requestFocus();
-                Toast.makeText(this, f.time ? "Use HH:mm, e.g. 07:30" : "Enter a number between " + f.min + " and " + f.max,
+                Toast.makeText(this, f.time ? "Use HH:mm, e.g. 07:30"
+                                : f.hours ? "Enter 0.5–12 hours in 0.25-hour steps"
+                                : "Enter a number between " + f.min + " and " + f.max,
                         Toast.LENGTH_SHORT).show();
                 return;
             }
@@ -365,7 +415,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 // The routine changed, so re-plan today before leaving.
                 AutoScheduler.replan(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Saved · today's plan updated"); }
-                    @Override public void onFailed(String message) { done("Saved"); }
+                    @Override public void onFailed(String message) { planningFailure = message; done("Saved · plan needs attention"); }
                 });
             }
             @Override public void onError(Exception error) {
@@ -413,6 +463,9 @@ public class ProfileSettingsActivity extends AppCompatActivity {
     private void done(String message) {
         if (isFinishing()) return;
         Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+        android.content.Intent result = new android.content.Intent();
+        if (planningFailure != null) result.putExtra("planningFailure", planningFailure);
+        setResult(RESULT_OK, result);
         finish();
     }
 

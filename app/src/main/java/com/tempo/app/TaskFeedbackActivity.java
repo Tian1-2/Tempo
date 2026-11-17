@@ -33,6 +33,8 @@ import com.tempo.app.insights.InsightsIcon;
 import com.tempo.app.learning.LearningRepository;
 import com.tempo.app.learning.LearningStore;
 import com.tempo.app.repository.TaskRepository;
+import com.tempo.app.scheduler.AutoScheduler;
+import com.tempo.app.scheduler.ScheduleGenerator;
 
 /** Explicit session outcome; the timer is paused while the user reviews this form. */
 public final class TaskFeedbackActivity extends AppCompatActivity {
@@ -160,7 +162,15 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         }
         updateTotal();
         save.setOnClickListener(v -> submit());
-        discard.setOnClickListener(v -> { if(!saving) { if(!manual) {clearTimer();setResult(RESULT_OK);} finish(); } });
+        discard.setOnClickListener(v -> {
+            if (saving) return;
+            if (manual) { finish(); return; }
+            clearTimer();
+            AutoScheduler.replan(this, new AutoScheduler.Listener() {
+                @Override public void onScheduled(ScheduleGenerator.Result plan) { setResult(RESULT_OK); finish(); }
+                @Override public void onFailed(String message) { setResult(RESULT_OK); finish(); }
+            });
+        });
         cancel.setOnClickListener(v -> { if(!saving) finish(); });
         // If the previous activity died after commit, settle the receipt instead of creating another row.
         setBusy(true);
@@ -197,7 +207,16 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
     private void saved(LearningStore.Saved result) {
         clearTimer();
         Toast.makeText(this,result.complete?"Task completed · "+result.totalMinutes+" min recorded":"Activity saved · task still in progress",Toast.LENGTH_LONG).show();
-        setResult(RESULT_OK); finish();
+        if (manual) { setResult(RESULT_OK); finish(); return; }
+        AutoScheduler.replan(this, new AutoScheduler.Listener() {
+            @Override public void onScheduled(ScheduleGenerator.Result plan) {
+                setResult(RESULT_OK); finish();
+            }
+            @Override public void onFailed(String message) {
+                Toast.makeText(TaskFeedbackActivity.this, "Time saved; plan not updated: " + message, Toast.LENGTH_LONG).show();
+                setResult(RESULT_OK); finish();
+            }
+        });
     }
     private void clearTimer() {
         SharedPreferences prefs=getSharedPreferences("tempo_focus_timer",MODE_PRIVATE);

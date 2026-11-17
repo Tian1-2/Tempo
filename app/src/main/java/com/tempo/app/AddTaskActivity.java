@@ -38,6 +38,9 @@ import java.util.Locale;
 
 /** Collects task conditions before showing schedule recommendations from the schedule repository. */
 public class AddTaskActivity extends AppCompatActivity {
+    private static final int EDIT_ROUTINE = 71;
+    private int taskAwaitingRoutine = -1;
+    private String taskAwaitingRoutineTitle;
     private static final int BG = Color.rgb(247, 248, 245);
     private static final int INK = Color.rgb(30, 48, 52);
     private static final int MUTED = Color.rgb(105, 120, 119);
@@ -141,9 +144,13 @@ public class AddTaskActivity extends AppCompatActivity {
         TextView dueLabel = text("Deadline", 14, MUTED, false);
         dueLabel.setPadding(0, dp(13), 0, dp(4));
         timeCard.addView(dueLabel);
-        deadline = edit("e.g. 2026-11-20 23:59 (optional)", "", false);
-        deadline.setInputType(InputType.TYPE_CLASS_DATETIME | InputType.TYPE_DATETIME_VARIATION_NORMAL);
+        deadline = edit("Tap to choose date and time (optional)", "", false);
+        deadline.setFocusable(false);
+        deadline.setOnClickListener(v -> WheelPickers.pickDeadline(this, deadline));
         timeCard.addView(deadline, new LinearLayout.LayoutParams(-1, dp(48)));
+        TextView clearDeadline = text("No deadline · clear", 12, MUTED, false);
+        clearDeadline.setOnClickListener(v -> deadline.setText(""));
+        timeCard.addView(clearDeadline);
         body.addView(timeCard);
         space(body, 20);
 
@@ -409,7 +416,7 @@ public class AddTaskActivity extends AppCompatActivity {
         page.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
         body.addView(text("STEP 2 · SUGGESTED TIME", 11, Color.rgb(52, 126, 91), true));
         space(body, 10);
-        body.addView(text("Task saved", 28, INK, true));
+        body.addView(text(rows == null || rows.isEmpty() ? "Task saved · not scheduled" : "Task scheduled", 28, INK, true));
         space(body, 8);
         body.addView(text(task.getTitle(), 17, MUTED, false));
         space(body, 28);
@@ -421,16 +428,16 @@ public class AddTaskActivity extends AppCompatActivity {
         card.addView(text("Expected  " + expectedMinutes + " min"
                 + (task.getPredictedDuration() > 0 ? " · Tempo prediction" : " · your estimate"), 15, INK, true));
         space(card, 9);
-        card.addView(text(rows == null || rows.isEmpty() ? "Planned  waiting"
+        card.addView(text(rows == null || rows.isEmpty() ? "Planned  0 min"
                 : "Planned  " + plannedMinutes + " min", 14, MUTED, false));
         space(card, 17);
         rule(card);
         space(card, 17);
         if (rows == null || rows.isEmpty()) {
-            card.addView(text("Waiting for a time slot", 20, INK, true));
+            card.addView(text("No time slot yet", 20, INK, true));
             space(card, 10);
             card.addView(text(scheduleNote != null ? scheduleNote
-                    : "Suggested slots appear here once the plan is generated. You can also check the schedule.", 14, MUTED, false));
+                    : "The task is saved, but it has no scheduled time. Check your routine and deadline, then try planning again. It will not appear on the schedule until a slot is created.", 14, MUTED, false));
         } else {
             card.addView(text("Suggested slots", 20, INK, true));
             space(card, 12);
@@ -452,16 +459,42 @@ public class AddTaskActivity extends AppCompatActivity {
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(22), dp(10), dp(22), dp(20));
         if (rows == null || rows.isEmpty()) {
+            if (AutoScheduler.NO_PROFILE.equals(scheduleNote)) {
+                TextView profile = text("Set up routine", 14, Color.rgb(52, 126, 91), true);
+                profile.setGravity(Gravity.CENTER);
+                profile.setOnClickListener(v -> {
+                    taskAwaitingRoutine = task.getTaskId();
+                    taskAwaitingRoutineTitle = task.getTitle();
+                    startActivityForResult(new Intent(this, ProfileSettingsActivity.class), EDIT_ROUTINE);
+                });
+                footer.addView(profile, new LinearLayout.LayoutParams(-1, dp(42)));
+            }
             TextView retry = text("Plan again", 14, Color.rgb(52, 126, 91), true);
             retry.setGravity(Gravity.CENTER);
             retry.setOnClickListener(v -> scheduleAndShow(task.getTaskId(), task.getTitle()));
             footer.addView(retry, new LinearLayout.LayoutParams(-1, dp(42)));
         }
-        TextView done = text("Done", 16, INK, true);
+        TextView done = text(rows == null || rows.isEmpty() ? "Close · task saved" : "View on schedule", 16, INK, true);
         done.setGravity(Gravity.CENTER); done.setBackground(shape(MINT, 18));
-        done.setOnClickListener(v -> finish());
+        if (rows == null || rows.isEmpty()) done.setOnClickListener(v -> finish());
+        else {
+            long firstDay = rows.get(0).getStartTime();
+            done.setOnClickListener(v -> {
+                Intent schedule = new Intent(this, SchedulePreviewActivity.class);
+                schedule.putExtra("selectedDayMillis", firstDay);
+                startActivity(schedule);
+                finish();
+            });
+        }
         footer.addView(done, new LinearLayout.LayoutParams(-1, dp(54)));
         page.addView(footer);
+    }
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == EDIT_ROUTINE && resultCode == RESULT_OK && taskAwaitingRoutine > 0) {
+            scheduleNote = data == null ? null : data.getStringExtra("planningFailure");
+            showRecommendation(taskAwaitingRoutine, taskAwaitingRoutineTitle);
+        }
     }
     private void section(LinearLayout parent, String value) {
         // Section label in the app-wide eyebrow style.

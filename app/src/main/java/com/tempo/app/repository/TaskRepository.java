@@ -70,6 +70,17 @@ public class TaskRepository {
         });
     }
 
+    public void archiveTask(int taskId, Callback<Integer> callback) {
+        executor.execute(() -> {
+            try {
+                int rows = taskDao.archiveTask(taskId);
+                mainHandler.post(() -> callback.onSuccess(rows));
+            } catch (Exception e) {
+                mainHandler.post(() -> callback.onError(e));
+            }
+        });
+    }
+
     public void getAllTasks(Callback<List<Task>> callback) {
         executor.execute(() -> {
             try {

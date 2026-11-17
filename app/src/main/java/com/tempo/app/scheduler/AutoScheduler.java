@@ -6,6 +6,7 @@ import android.os.Looper;
 import android.util.Log;
 
 import com.tempo.app.model.Task;
+import com.tempo.app.FocusSessionState;
 import com.tempo.app.model.UserProfile;
 import com.tempo.app.planning.GenerationPreflight;
 import com.tempo.app.repository.RepositoryProvider;
@@ -24,7 +25,7 @@ import java.util.concurrent.Executors;
 public final class AutoScheduler {
     private static final String TAG = "AutoScheduler";
     public static final String NO_PROFILE = "Save your daily routine in Profile first to enable auto-scheduling.";
-    public static final String TIMER_ACTIVE = "A focus timer is running. Today's plan will update after you finish it.";
+    public static final String TIMER_ACTIVE = "A focus timer is actively counting. Pause it to plan another task, or finish the session.";
     /** Same key the focus timer (and D's generate entry) uses to mark an active session. */
     private static final String TIMER_PREFS = "tempo_focus_timer";
 
@@ -43,14 +44,13 @@ public final class AutoScheduler {
     }
 
     /**
-     * Re-plans today and the next days ({@link ScheduleService#HORIZON_DAYS}); manually edited, past
-     * and completed slots are kept, and work that does not fit today continues on later days.
-     * Skipped while a focus timer is running (same rule as the schedule page's Generate button).
+     * Re-plans today and the next days ({@link ScheduleService#HORIZON_DAYS}); manually edited
+     * and completed slots are kept, while incomplete automatic slots are refreshed. Work that
+     * does not fit today continues on later days. Skipped while a focus timer is running.
      * Listener may be null; onScheduled receives null when there was nothing to schedule.
      */
     public static void replan(Context context, Listener listener) {
-        if (context.getSharedPreferences(TIMER_PREFS, Context.MODE_PRIVATE)
-                .getInt("taskId", Integer.MIN_VALUE) != Integer.MIN_VALUE) {
+        if (FocusSessionState.isRunning(context.getSharedPreferences(TIMER_PREFS, Context.MODE_PRIVATE))) {
             post(listener, null, TIMER_ACTIVE);
             return;
         }
