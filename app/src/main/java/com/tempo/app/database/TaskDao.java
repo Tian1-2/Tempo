@@ -70,6 +70,16 @@ public class TaskDao {
         return tasks;
     }
 
+    /** Every task including deleted ones, for history views that must still name and colour old records. */
+    public List<Task> getAllTasksIncludingDeleted() {
+        List<Task> list = new ArrayList<>();
+        SQLiteDatabase db = dbHelper.getReadableDatabase();
+        try (Cursor cursor = db.query("tasks", null, null, null, null, null, "task_id ASC")) {
+            while (cursor.moveToNext()) list.add(cursorToTask(cursor));
+        }
+        return list;
+    }
+
     // ---------- READ: one ----------
     public Task getTaskById(int taskId) {
         SQLiteDatabase db = dbHelper.getReadableDatabase();

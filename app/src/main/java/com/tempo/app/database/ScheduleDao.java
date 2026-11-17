@@ -66,11 +66,20 @@ public class ScheduleDao {
     public void replaceGeneratedForDate(String date, List<ScheduleItem> items) { replaceGeneratedForDate(date, items, Long.MIN_VALUE); }
 
     public void replaceGeneratedForDate(String date, List<ScheduleItem> items, long preserveBefore) {
+        replaceGenerated(date, items, "scheduled_date = ? AND is_manually_edited = 0 AND status = ? AND start_time >= ?", preserveBefore);
+    }
+
+    /** Deletes automatic PLANNED slots that started before {@code keepFrom}; later ones stay. */
+    public void replaceMissedGeneratedForDate(String date, List<ScheduleItem> items, long keepFrom) {
+        replaceGenerated(date, items, "scheduled_date = ? AND is_manually_edited = 0 AND status = ? AND start_time < ?", keepFrom);
+    }
+
+    private void replaceGenerated(String date, List<ScheduleItem> items, String where, long time) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         db.beginTransaction();
         try {
-            db.delete("schedule_items", "scheduled_date = ? AND is_manually_edited = 0 AND status = ? AND start_time >= ?",
-                    new String[]{date, "PLANNED", String.valueOf(preserveBefore)});
+            db.delete("schedule_items", where,
+                    new String[]{date, "PLANNED", String.valueOf(time)});
             for (ScheduleItem item : items) {
                 if (!date.equals(item.getScheduledDate()) || item.isManuallyEdited() || !"PLANNED".equals(item.getStatus())) {
                     throw new IllegalArgumentException("Expected generated PLANNED item for " + date);

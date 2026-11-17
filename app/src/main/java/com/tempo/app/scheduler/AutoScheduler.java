@@ -50,6 +50,21 @@ public final class AutoScheduler {
      * Listener may be null; onScheduled receives null when there was nothing to schedule.
      */
     public static void replan(Context context, Listener listener) {
+        run(context, listener, false);
+    }
+
+    /**
+     * Light refresh for opening the schedule page: upcoming automatic slots keep their times, and
+     * only slots more than 15 minutes past their start without being done, plus work not yet planned, are
+     * placed again. Falls back to a full {@link #replan} when a kept slot no longer fits (for
+     * example after the routine changed). Data changes (task saved or deleted, profile or fixed
+     * schedule edited, focus feedback) should call {@link #replan} instead.
+     */
+    public static void refresh(Context context, Listener listener) {
+        run(context, listener, true);
+    }
+
+    private static void run(Context context, Listener listener, boolean keepUpcoming) {
         if (FocusSessionState.isRunning(context.getSharedPreferences(TIMER_PREFS, Context.MODE_PRIVATE))) {
             post(listener, null, TIMER_ACTIVE);
             return;
@@ -73,8 +88,20 @@ public final class AutoScheduler {
                     }
                     return;
                 }
-                ScheduleGenerator.Result result = new ScheduleService()
-                        .generateRange(ScheduleService.HORIZON_DAYS, new DefaultScheduleConstraints());
+                ScheduleGenerator.Result result;
+                if (keepUpcoming) {
+                    try {
+                        result = new ScheduleService().generateRange(ScheduleService.HORIZON_DAYS,
+                                new DefaultScheduleConstraints(), true);
+                    } catch (IllegalArgumentException stale) {
+                        Log.i(TAG, "Kept slots no longer fit; re-planning fully", stale);
+                        result = new ScheduleService().generateRange(ScheduleService.HORIZON_DAYS,
+                                new DefaultScheduleConstraints(), false);
+                    }
+                } else {
+                    result = new ScheduleService().generateRange(ScheduleService.HORIZON_DAYS,
+                            new DefaultScheduleConstraints(), false);
+                }
                 post(listener, result, null);
             } catch (Exception e) {
                 Log.w(TAG, "Schedule generation failed for " + date, e);

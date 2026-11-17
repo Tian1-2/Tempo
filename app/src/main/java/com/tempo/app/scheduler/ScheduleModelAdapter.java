@@ -81,6 +81,23 @@ public final class ScheduleModelAdapter {
         return result;
     }
 
+    /**
+     * Automatic PLANNED slots that have not started yet, returned as locked sessions so the
+     * generator keeps them in place. {@link #newScheduleItems} skips locked sessions, so their
+     * existing rows are not inserted twice.
+     */
+    public static List<Session> upcomingAutoSessions(List<ScheduleItem> existing, long earliest) {
+        if (existing == null) throw new IllegalArgumentException("Schedule items are null");
+        List<Session> result = new ArrayList<>();
+        for (ScheduleItem item : existing) {
+            if (item != null && !item.isManuallyEdited() && "PLANNED".equals(item.getStatus())
+                    && item.getStartTime() >= earliest && item.getStartTime() < item.getEndTime()) {
+                result.add(new Session(item.getTaskId(), new Interval(item.getStartTime(), item.getEndTime()), true));
+            }
+        }
+        return result;
+    }
+
     /** Convert only newly generated sessions. Existing locked rows retain their database IDs. */
     public static List<ScheduleItem> newScheduleItems(String date, ScheduleGenerator.Result result) {
         if (date == null || result == null) throw new IllegalArgumentException("Date or result is null");

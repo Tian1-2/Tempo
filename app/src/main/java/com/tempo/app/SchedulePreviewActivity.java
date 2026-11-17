@@ -23,6 +23,7 @@ import android.text.InputType;
 
 import androidx.appcompat.app.AppCompatActivity;
 
+import com.tempo.app.model.FixedEvent;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
@@ -57,7 +58,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private final List<ScheduleItem> schedule = new ArrayList<>();
     private boolean includeBreaks = true;
     private long selectedDayMillis;
-    private boolean demoData;
+    private final List<FixedEvent> fixedEvents = new ArrayList<>();
     private int focusBreakMinutes = 15;
     private LinearLayout content;
     private LinearLayout timelineBody;
@@ -85,6 +86,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         content.setPadding(0, dp(20), 0, 0);
         content.setBackgroundColor(BG);
         setContentView(content);
+        com.tempo.app.ui.Ui.fitSystemBars(this);
         render();
     }
 
@@ -93,7 +95,9 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         if (content != null) {
             loadData();
             if (selectedDayMillis >= startOfDay(System.currentTimeMillis())) {
-                AutoScheduler.replan(this, new AutoScheduler.Listener() {
+                // Opening the page must not move suggestions the user already saw: keep upcoming
+                // slots and only re-place missed ones (see AutoScheduler.refresh).
+                AutoScheduler.refresh(this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(ScheduleGenerator.Result result) {
                         if (!isFinishing() && !isDestroyed()) loadData();
                     }
@@ -117,6 +121,16 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private void loadData() {
         final long requestedDay = selectedDayMillis;
         final long request = ++loadSequence;
+        new Thread(() -> {
+            List<FixedEvent> events;
+            try { events = RepositoryProvider.getFixedEventDao().getAll(); }
+            catch (RuntimeException e) { events = Collections.emptyList(); }
+            final List<FixedEvent> loaded = events;
+            runOnUiThread(() -> {
+                if (request != loadSequence || isFinishing() || isDestroyed()) return;
+                fixedEvents.clear(); fixedEvents.addAll(loaded); render();
+            });
+        }, "fixed-events").start();
         RepositoryProvider.getUserProfileRepository().getProfile(new TaskRepository.Callback<com.tempo.app.model.UserProfile>() {
             @Override public void onSuccess(com.tempo.app.model.UserProfile profile) {
                 if (profile != null && requestedDay == selectedDayMillis && request == loadSequence
@@ -131,18 +145,11 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 if (requestedDay != selectedDayMillis || request != loadSequence || isFinishing() || isDestroyed()) return;
                 tasks.clear();
                 tasks.addAll(result);
-                demoData = tasks.isEmpty();
-                if (demoData) {
-                    tasks.add(demoTask(-1, "Read course notes", "Study", 70));
-                    tasks.add(demoTask(-2, "Finish project report", "Work", 90));
-                    tasks.add(demoTask(-3, "Walk and tidy up", "Life", 45));
-                }
                 String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(selectedDayMillis));
                 RepositoryProvider.getScheduleRepository().getScheduleByDate(date, new TaskRepository.Callback<List<ScheduleItem>>() {
                     @Override public void onSuccess(List<ScheduleItem> rows) {
                         if (requestedDay != selectedDayMillis || request != loadSequence || isFinishing() || isDestroyed()) return;
                         schedule.clear(); schedule.addAll(rows);
-                        if (demoData && selectedDayMillis == startOfDay(System.currentTimeMillis())) addDemoSchedule();
                         if (pendingJumpDay == requestedDay) { jumpToTime = true; pendingJumpDay = Long.MIN_VALUE; }
                         render();
                     }
@@ -204,11 +211,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         row.addView(toggle);
         content.addView(row);
         spacer(8);
-        if (demoData && !schedule.isEmpty()) {
-            TextView demo = label("Sample schedule · preview only, not saved", 12, MUTED, false);
-            demo.setPadding(dp(22), 0, dp(22), 0);
-            content.addView(demo);
-        }
         spacer(8);
 
         timelineScroll = new ScrollView(this);
@@ -240,11 +242,15 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         summary.setText(finished + "/" + dayTaskIds.size());
         List<ScheduleDisplayBlocks.Block> blocks = ScheduleDisplayBlocks.group(sessions,
                 new ArrayList<ScheduleGenerator.Interval>(), focusBreakMinutes);
-        addTimeline(blocks, byId);
+        // Above the scrolling timeline (which jumps to the current time), so it is always visible.
         if (sessions.isEmpty()) {
-            spacerIn(timelineBody, 14);
-            timelineBody.addView(label("Nothing planned for this day yet. Add a task to get a suggested time.", 13, MUTED, false));
+            TextView empty = label(tasks.isEmpty()
+                    ? "No tasks yet. Tap Add to create your first task and Tempo will suggest a time."
+                    : "Nothing planned for this day yet. Tap Add to get a suggested time.", 13, MUTED, false);
+            empty.setPadding(dp(22), 0, dp(22), dp(8));
+            content.addView(empty, content.indexOfChild(timelineScroll));
         }
+        addTimeline(blocks, byId);
         spacerIn(timelineBody, 26);
         timelineBody.addView(label("TEMPO  ·  FIND YOUR RHYTHM", 11, MUTED, true));
         addBottomBar();
@@ -364,6 +370,23 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                     : "Life".equals(task.getCategory()) ? Color.rgb(249, 233, 211) : MINT, 12));
             event.setOnClickListener(v -> openScheduleDetail(task, block));
             entries.add(new TimelineEntry(event, start, end));
+        }
+        for (FixedEvent fixed : fixedEvents) {
+            if (!fixed.occursOn(selectedDayMillis)) continue;
+            int start = fixed.getStartMinute(), end = fixed.getEndMinute();
+            String text = fixed.getTitle() + "\n" + fixed.timeText() + "  ·  Fixed every " + fixed.dayName();
+            TextView view = label(text, 12, MUTED, true);
+            view.setGravity(Gravity.CENTER_VERTICAL);
+            view.setPadding(dp(12), dp(6), dp(8), dp(6));
+            view.setMinHeight(dp(44));
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(Color.rgb(236, 238, 241));
+            bg.setStroke(dp(1), Color.rgb(200, 206, 212), dp(5), dp(4));
+            bg.setCornerRadius(dp(12));
+            view.setBackground(bg);
+            view.setContentDescription(fixed.getTitle() + ", fixed " + fixed.timeText());
+            view.setOnClickListener(v -> startActivity(new Intent(this, FixedScheduleActivity.class)));
+            entries.add(new TimelineEntry(view, start, end));
         }
         if (includeBreaks) {
             List<ScheduleGenerator.Session> ordered = new ArrayList<>();
@@ -499,20 +522,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         startActivity(intent);
     }
 
-    private Task demoTask(int id, String title, String category, int minutes) {
-        Task task = new Task(title, category, minutes, 2, 3, 0);
-        task.setTaskId(id); return task;
-    }
-    private void addDemoSchedule() {
-        addDemoItem(-1, 9, 0, 9, 50);
-        addDemoItem(-1, 10, 0, 10, 20);
-        addDemoItem(-2, 11, 0, 12, 30);
-        addDemoItem(-3, 16, 0, 16, 45);
-    }
-    private void addDemoItem(int id, int h1, int m1, int h2, int m2) {
-        ScheduleItem item = new ScheduleItem(); item.setTaskId(id); item.setStatus("PLANNED");
-        item.setStartTime(atDayTime(h1, m1)); item.setEndTime(atDayTime(h2, m2)); schedule.add(item);
-    }
     private long atDayTime(int hour, int minute) {
         Calendar c = Calendar.getInstance(); c.setTimeInMillis(selectedDayMillis);
         c.set(Calendar.HOUR_OF_DAY, hour); c.set(Calendar.MINUTE, minute); return c.getTimeInMillis();

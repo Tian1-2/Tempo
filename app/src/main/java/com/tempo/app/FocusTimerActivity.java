@@ -69,6 +69,7 @@ public class FocusTimerActivity extends AppCompatActivity {
         page.setPadding(0, dp(16), 0, dp(20));
         page.setBackgroundColor(BG);
         setContentView(page);
+        com.tempo.app.ui.Ui.fitSystemBars(this);
         LinearLayout navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER_VERTICAL);
         BackChevronView back = new BackChevronView(this, "Back");

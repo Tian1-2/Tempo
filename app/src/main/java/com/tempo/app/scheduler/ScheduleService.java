@@ -39,6 +39,16 @@ public final class ScheduleService {
     }
 
     public ScheduleGenerator.Result generateAndSave(String date, ScheduleConstraintsProvider.DayConstraints constraints) {
+        return generateAndSave(date, constraints, false);
+    }
+
+    /**
+     * @param keepUpcoming when true, automatic slots that have not started yet stay where they are
+     *                     and only missed slots and unplanned work are placed again. Used when the
+     *                     schedule page is opened, so suggested times do not move under the user.
+     */
+    public ScheduleGenerator.Result generateAndSave(String date, ScheduleConstraintsProvider.DayConstraints constraints,
+                                                   boolean keepUpcoming) {
         if (Looper.myLooper() == Looper.getMainLooper()) {
             throw new IllegalStateException("ScheduleService must run on a background thread");
         }
@@ -81,6 +91,10 @@ public final class ScheduleService {
         for (int minutes : retainedPastMinutes.values()) usedToday += minutes;
         int capacity = (int) Math.max(0, profile.getDailyCapacity() - usedToday);
         List<ScheduleGenerator.Session> lockedHere = ScheduleModelAdapter.lockedSessions(existing, earliest);
+        // A slot only counts as missed once it is MISSED_AFTER_MINUTES past its start; until then
+        // the user may simply be starting late, and moving it every minute would look jumpy.
+        long keepFrom = earliest - MISSED_AFTER_MINUTES * MINUTE;
+        if (keepUpcoming) lockedHere.addAll(ScheduleModelAdapter.upcomingAutoSessions(existing, keepFrom));
         Map<Long, Integer> lockedMinutes = new HashMap<>();
         for (ScheduleGenerator.Session s : lockedHere) {
             lockedMinutes.merge(s.taskId, (int) ((s.interval.end - s.interval.start) / MINUTE), Integer::sum);
@@ -107,9 +121,14 @@ public final class ScheduleService {
                 locked, constraints.productiveWindows,
                 profile.getFocusDuration(), profile.getBreakDuration(), capacity);
         ScheduleGenerator.Result result = new ScheduleGenerator().generate(request);
-        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result), Long.MIN_VALUE);
+        List<ScheduleItem> fresh = ScheduleModelAdapter.newScheduleItems(date, result);
+        if (keepUpcoming) schedules.replaceMissedGeneratedForDateSync(date, fresh, keepFrom);
+        else schedules.replaceGeneratedForDateSync(date, fresh, Long.MIN_VALUE);
         return result;
     }
+
+    /** On a light refresh, an untouched automatic slot is re-placed this long after its start. */
+    public static final int MISSED_AFTER_MINUTES = 15;
 
     /** Days covered by {@link #generateRange}: today plus the next six days. */
     public static final int HORIZON_DAYS = 7;
@@ -121,6 +140,16 @@ public final class ScheduleService {
      * adjusted and completed slots are kept. Call off the UI thread.
      */
     public ScheduleGenerator.Result generateRange(int days, ScheduleConstraintsProvider provider) {
+        return generateRange(days, provider, false);
+    }
+
+    /**
+     * Like {@link #generateRange(int, ScheduleConstraintsProvider)}; with {@code keepUpcoming} the
+     * automatic slots that have not started stay put (see {@link #generateAndSave(String,
+     * ScheduleConstraintsProvider.DayConstraints, boolean)}). Throws IllegalArgumentException when
+     * a kept slot no longer fits the constraints; callers then run a full re-plan.
+     */
+    public ScheduleGenerator.Result generateRange(int days, ScheduleConstraintsProvider provider, boolean keepUpcoming) {
         if (days < 1) throw new IllegalArgumentException("days must be at least 1");
         long now = System.currentTimeMillis();
         Calendar cursor = Calendar.getInstance();
@@ -132,12 +161,13 @@ public final class ScheduleService {
             cursor.add(Calendar.DAY_OF_MONTH, 1);
         }
         ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
-        for (int i = 0; i < dates.size(); i++) {
+        if (!keepUpcoming) for (int i = 0; i < dates.size(); i++) {
             schedules.replaceGeneratedForDateSync(dates.get(i), Collections.<ScheduleItem>emptyList(), Long.MIN_VALUE);
         }
         List<ScheduleGenerator.Result> results = new ArrayList<>();
         for (String date : dates) {
-            ScheduleGenerator.Result day = generateAndSave(date, provider);
+            if (provider == null) throw new IllegalArgumentException("Constraints provider is null");
+            ScheduleGenerator.Result day = generateAndSave(date, provider.getForDate(date), keepUpcoming);
             results.add(day);
             if (day.unscheduledTasks.isEmpty()) break; // everything fits: later days have nothing to add
         }

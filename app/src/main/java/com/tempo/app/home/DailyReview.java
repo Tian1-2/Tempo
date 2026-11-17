@@ -76,6 +76,10 @@ public final class DailyReview {
         int plannedMinutes = 0;
         if (daySchedule != null) for (ScheduleItem item : daySchedule) {
             if (item == null || "CANCELLED".equals(item.getStatus())) continue; // cancelled after early completion
+            // A task the user deleted is not "planned but not done": leave it out of the plan.
+            // Callers pass the visible tasks, which exclude deleted ones.
+            Task owner = byId.get(item.getTaskId());
+            if (tasks != null && (owner == null || "DELETED".equals(owner.getStatus()))) continue;
             planned.add(item.getTaskId());
             plannedMinutes += (int) Math.max(0, (item.getEndTime() - item.getStartTime()) / 60_000L);
         }

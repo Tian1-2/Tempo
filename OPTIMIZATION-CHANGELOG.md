@@ -38,3 +38,15 @@
 ## 6. 期望后续改动（本分支尚未实现）
 
 - **不同任务标签使用不同颜色**：希望用户能在档案页添加或管理任务标签，并为每个标签选择颜色；日程时间块、任务详情等位置使用对应颜色，帮助用户一眼区分任务类别。该功能还需要组员确定标签的数据结构、存储接口及统一的颜色使用规则。
+
+## 7. task-a 后续修复（在 `optimization` 基础上）
+
+`task-a` 已快进到 `optimization`（`ed669f2`），以下改动接在其后。
+
+- **打开日程不再挪动已推荐的时间**（`AutoScheduler.refresh`、`ScheduleService`、`ScheduleDao`）：原来每次打开日程都会清空并重排所有未完成的自动时段，推荐时间可能每次都变。现在打开日程只做"轻刷新"：还没开始的自动时段原样保留，只有开始时间已过 15 分钟以上却没做的时段和尚未安排的剩余工作会重新放置。保存/删除任务、修改档案、修改固定日程、计时反馈仍然全量重排。若保留的时段已不符合新约束（例如作息改了），自动退回全量重排。
+- **固定日程（课程、会议）**（新增 `FixedScheduleActivity`、`FixedEvent`、`FixedEventDao`；`DefaultScheduleConstraints`）：档案页新增 **Edit fixed schedule** 入口，可按星期添加每周固定时段（如周二 14:00–16:00 课）。排程把它们当作占用时间；日程时间轴以灰色虚线框显示。数据库升级到 V4，新增 `fixed_events` 表，旧数据无需迁移。调试版示例数据会附带一节当天的 "COMP7506 lecture"。
+- **删除任务后的昨日回顾**（`DailyReview`）：已删除任务过去完成的时段不再被算作"计划了但没完成"；它的专注时长仍计入。
+- **History 中已删除任务的颜色**（`SessionHistoryActivity`、`TaskDao.getAllTasksIncludingDeleted`）：读取类别时包含已删除任务，记录保持原类别颜色。
+- **遗留代码清理**：日程页在数据库为空时不再显示 3 条假示例任务，改为提示添加第一个任务；删除最早的数据库测试 `MainActivity` 和 `activity_main.xml`。
+- **文档**：新增根目录英文 `README.md`（功能、编译运行、测试、项目结构）；`gradlew` 加上可执行权限。
+- **验证**：`:app:assembleDebug`、`:app:testDebugUnitTest`（新增 `TaskAPolishUnitTest` 7 项）、`python3 checks/run_checks.py`（新增 `FixedScheduleCheck` 10 项，真实 SQLite）全部通过；模拟器核对见提交说明。

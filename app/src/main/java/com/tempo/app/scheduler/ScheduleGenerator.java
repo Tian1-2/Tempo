@@ -126,6 +126,9 @@ public final class ScheduleGenerator {
         }
     }
 
+    /** Shortest piece of work worth placing in a gap; shorter gaps are left free. */
+    public static final int MIN_SESSION_MINUTES = 10;
+
     public Result generate(Request request) {
         if (request == null) throw new IllegalArgumentException("Request is null");
         validate(request);
@@ -163,6 +166,10 @@ public final class ScheduleGenerator {
             }
             while (remaining > 0 && used < request.maxTaskMinutes && cursor < deadline) {
                 List<Interval> free = freeWindows(request, sessions, task.id, cursor, deadline);
+                // Skip slivers (e.g. one minute before a meal): a piece must be at least
+                // MIN_SESSION_MINUTES long, unless that is all the task still needs.
+                final int shortest = Math.min(remaining, Math.min(MIN_SESSION_MINUTES, request.focusMinutes));
+                free.removeIf(w -> minutes(w) < shortest);
                 Interval chosen = chooseWindow(free, request.productiveWindows, task.difficulty);
                 if (chosen == null) break;
                 int length = Math.min(Math.min(remaining, request.focusMinutes),

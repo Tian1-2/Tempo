@@ -43,6 +43,29 @@ public final class Ui {
                 View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR | View.SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR);
     }
 
+    /**
+     * Pads the page clear of the status and navigation bars. Apps targeting Android 15+ are always
+     * drawn edge-to-edge, so without this the top row sits under the clock and bottom buttons under
+     * the gesture bar. Call after setContentView. The bar areas take the page's background colour.
+     */
+    public static void fitSystemBars(Activity activity) {
+        View content = activity.findViewById(android.R.id.content);
+        if (content == null) return;
+        int color = BG;
+        if (content instanceof android.view.ViewGroup && ((android.view.ViewGroup) content).getChildCount() > 0) {
+            android.graphics.drawable.Drawable bg = ((android.view.ViewGroup) content).getChildAt(0).getBackground();
+            if (bg instanceof android.graphics.drawable.ColorDrawable) color = ((android.graphics.drawable.ColorDrawable) bg).getColor();
+        }
+        content.setBackgroundColor(color);
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content, (v, insets) -> {
+            androidx.core.graphics.Insets bars = insets.getInsets(
+                    androidx.core.view.WindowInsetsCompat.Type.systemBars() | androidx.core.view.WindowInsetsCompat.Type.ime());
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+            return androidx.core.view.WindowInsetsCompat.CONSUMED;
+        });
+        androidx.core.view.ViewCompat.requestApplyInsets(content);
+    }
+
     public static int dp(Context c, int value) {
         return Math.round(value * c.getResources().getDisplayMetrics().density);
     }

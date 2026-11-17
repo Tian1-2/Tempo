@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
+import android.content.Intent;
 import android.os.Bundle;
 import android.text.Editable;
 import android.text.InputType;
@@ -129,6 +130,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         scroll.addView(body);
         root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
         setContentView(root);
+        com.tempo.app.ui.Ui.fitSystemBars(this);
 
         LinearLayout navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER_VERTICAL);
@@ -206,6 +208,19 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         addField(focusCard, rest, "Break", "Rest between focus blocks", "min");
         addField(focusCard, capacity, "Daily task time", "Most Tempo will plan per day", "h");
         body.addView(focusCard);
+
+        section("FIXED SCHEDULE");
+        LinearLayout fixedCard = card();
+        fixedCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        fixedCard.addView(text("Classes and meetings", 15, INK, true));
+        space(fixedCard, 2);
+        fixedCard.addView(text("Weekly times Tempo keeps free, e.g. Tuesday 14:00–16:00 lecture. Saved separately from this page.",
+                13, MUTED, false));
+        space(fixedCard, 10);
+        TextView editFixed = Ui.secondary(this, "Edit fixed schedule");
+        editFixed.setOnClickListener(v -> startActivity(new Intent(this, FixedScheduleActivity.class)));
+        fixedCard.addView(editFixed);
+        body.addView(fixedCard);
 
         // Demo seeding is available only through a hidden debug gesture.
         if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {

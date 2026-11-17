@@ -76,6 +76,7 @@ public class AddTaskActivity extends AppCompatActivity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(BG);
         setContentView(page);
+        com.tempo.app.ui.Ui.fitSystemBars(this);
         LinearLayout header = new LinearLayout(this);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(0, dp(14), dp(20), dp(4));

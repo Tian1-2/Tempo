@@ -92,6 +92,18 @@ public class TaskRepository {
         });
     }
 
+    /** Includes deleted tasks; only for history, where old records still need their name and colour. */
+    public void getAllTasksIncludingDeleted(Callback<List<Task>> callback) {
+        executor.execute(() -> {
+            try {
+                List<Task> list = taskDao.getAllTasksIncludingDeleted();
+                mainHandler.post(() -> callback.onSuccess(list));
+            } catch (Exception e) {
+                mainHandler.post(() -> callback.onError(e));
+            }
+        });
+    }
+
     public void getPendingTasks(Callback<List<Task>> callback) {
         executor.execute(() -> {
             try {

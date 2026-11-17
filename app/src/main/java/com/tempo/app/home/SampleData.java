@@ -63,6 +63,13 @@ public final class SampleData {
             new UserProfileDao(helper).saveProfile(p);
         }
 
+        // A weekly lecture on today's weekday, so the demo shows planning around fixed commitments.
+        com.tempo.app.database.FixedEventDao fixed = new com.tempo.app.database.FixedEventDao(helper);
+        if (fixed.getAll().isEmpty()) {
+            fixed.insert(new com.tempo.app.model.FixedEvent("COMP7506 lecture",
+                    com.tempo.app.model.FixedEvent.isoDayOfWeek(now), 14 * 60, 16 * 60));
+        }
+
         // Six days ago → yesterday: completed work with realistic over- and under-runs.
         done(-6, "Linear algebra problem set", "Study", "Assignment", 60, 4, 4, 9, 30, 85, 4);
         done(-6, "Gym session", "Life", "Exercise", 60, 2, 3, 18, 45, 55, 2);

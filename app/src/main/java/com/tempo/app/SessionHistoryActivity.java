@@ -83,8 +83,9 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         content.addView(Ui.text(this, "Reading your records…", 14, Ui.MUTED, false));
         learning.records(new TaskRepository.Callback<List<LearningStore.Record>>() {
             public void onSuccess(List<LearningStore.Record> rows) {
-                // Categories colour each record; read them once, then render.
-                RepositoryProvider.getTaskRepository().getAllTasks(new TaskRepository.Callback<List<Task>>() {
+                // Categories colour each record; read them once, then render. Deleted tasks are
+                // included so their past records keep the right colour.
+                RepositoryProvider.getTaskRepository().getAllTasksIncludingDeleted(new TaskRepository.Callback<List<Task>>() {
                     public void onSuccess(List<Task> tasks) { render(rows, tasks); }
                     public void onError(Exception e) { render(rows, java.util.Collections.<Task>emptyList()); }
                 });

@@ -83,6 +83,11 @@ public class ScheduleRepository {
         scheduleDao.replaceGeneratedForDate(date, items);
     }
 
+    /** Removes automatic slots that started before {@code keepFrom}, keeps later ones, inserts {@code items}. */
+    public void replaceMissedGeneratedForDateSync(String date, List<ScheduleItem> items, long keepFrom) {
+        scheduleDao.replaceMissedGeneratedForDate(date, items, keepFrom);
+    }
+
     public void replaceGeneratedForDateSync(String date, List<ScheduleItem> items, long preserveBefore) {
         scheduleDao.replaceGeneratedForDate(date, items, preserveBefore);
     }
