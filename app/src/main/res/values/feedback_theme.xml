@@ -1,0 +1,8 @@
+<resources>
+    <style name="Theme.TempoFeedback" parent="Theme.Material3.Light.NoActionBar">
+        <item name="colorPrimary">@color/insights_blue</item>
+        <item name="android:colorAccent">@color/insights_blue</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowBackground">@color/insights_white</item>
+    </style>
+</resources>

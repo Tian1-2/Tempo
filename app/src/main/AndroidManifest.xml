@@ -15,6 +15,9 @@
             android:name=".MainActivity"
             android:exported="false"
             android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".TaskFeedbackActivity" android:exported="false" android:theme="@style/Theme.TempoFeedback" android:windowSoftInputMode="adjustResize" />
+        <activity android:name=".InsightsActivity" android:exported="false" />
+        <activity android:name=".SessionHistoryActivity" android:exported="false" android:theme="@style/Theme.TempoFeedback" android:windowSoftInputMode="adjustResize" />
         <activity android:name=".FocusTimerActivity" android:exported="false" />
         <activity android:name=".AddTaskActivity" android:exported="false" />
         <activity android:name=".ProfileSettingsActivity" android:exported="false" />

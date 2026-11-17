@@ -1,6 +1,9 @@
 package com.tempo.app.scheduler;
 
 import android.os.Looper;
+import android.database.Cursor;
+import com.tempo.app.learning.LearningStore;
+import com.tempo.app.model.Task;
 
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.UserProfile;
@@ -38,6 +41,8 @@ public final class ScheduleService {
             throw new IllegalStateException("ScheduleService must run on a background thread");
         }
         if (constraints == null) throw new IllegalArgumentException("Constraints are null");
+        LearningStore learning = new LearningStore(RepositoryProvider.getDatabaseHelper());
+        learning.refreshPredictions(System.currentTimeMillis());
         UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
         if (profile == null) throw new IllegalStateException("Set a user profile before generating a schedule");
         ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
@@ -50,30 +55,38 @@ public final class ScheduleService {
         long sleep = atTime(start, profile.getSleepTime());
         if (wake >= sleep) throw new IllegalArgumentException("Wake time must precede sleep time on the same day");
         List<Interval> blocked = new ArrayList<>(constraints.fixedBusyIntervals);
+        long now = System.currentTimeMillis();
+        long earliest = Math.max(day.start, Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE);
+        if (day.start > now) earliest = day.start;
         for (ScheduleItem item : existing) {
-            if ("COMPLETED".equals(item.getStatus()) || "SKIPPED".equals(item.getStatus())) {
+            if ("CANCELLED".equals(item.getStatus())) continue;
+            if ("COMPLETED".equals(item.getStatus()) || "SKIPPED".equals(item.getStatus()) || item.getStartTime() < earliest) {
                 blocked.add(new Interval(item.getStartTime(), item.getEndTime()));
             }
         }
-        List<ScheduleGenerator.Task> tasks =
-                ScheduleModelAdapter.pendingTasks(RepositoryProvider.getTaskRepository().getPendingTasksSync());
+        List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
+        long usedToday = 0;
+        try (Cursor c = RepositoryProvider.getDatabaseHelper().getReadableDatabase().rawQuery(
+                "SELECT COALESCE(SUM(actual_duration),0) FROM task_feedback WHERE actual_duration>0 AND completed_at>=? AND completed_at<? AND completed_at<=?",
+                new String[]{String.valueOf(day.start), String.valueOf(day.end), String.valueOf(now)})) {
+            if (c.moveToFirst()) usedToday = c.getLong(0);
+        }
+        int capacity = (int) Math.max(0, profile.getDailyCapacity() - usedToday);
         Set<Long> pendingIds = new HashSet<>();
-        for (ScheduleGenerator.Task task : tasks) pendingIds.add(task.id);
+        for (Task task : pending) pendingIds.add((long) task.getTaskId());
         List<ScheduleGenerator.Session> locked = new ArrayList<>();
-        for (ScheduleGenerator.Session session : ScheduleModelAdapter.lockedSessions(existing)) {
+        for (ScheduleGenerator.Session session : ScheduleModelAdapter.lockedSessions(existing, earliest)) {
             // A locked slot whose task is no longer pending (e.g. completed) still occupies time but is not re-planned.
             if (pendingIds.contains(session.taskId)) locked.add(session);
             else blocked.add(session.interval);
         }
-        long now = System.currentTimeMillis();
-        long earliest = Math.max(day.start, Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE);
-        if (day.start > now) earliest = day.start;
         ScheduleGenerator.Request request = new ScheduleGenerator.Request(day, earliest,
-                tasks, Collections.singletonList(new Interval(wake, sleep)), blocked,
+                ScheduleModelAdapter.pendingTasks(pending, learning.remaining(pending, profile.getFocusDuration())),
+                Collections.singletonList(new Interval(wake, sleep)), blocked,
                 locked, constraints.productiveWindows,
-                profile.getFocusDuration(), profile.getBreakDuration(), profile.getDailyCapacity());
+                profile.getFocusDuration(), profile.getBreakDuration(), capacity);
         ScheduleGenerator.Result result = new ScheduleGenerator().generate(request);
-        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result));
+        schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result), earliest);
         return result;
     }
 

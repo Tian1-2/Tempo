@@ -28,8 +28,13 @@ import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
 import com.tempo.app.scheduler.AutoScheduler;
+import com.tempo.app.scheduler.DefaultScheduleConstraints;
 import com.tempo.app.scheduler.ScheduleDisplayBlocks;
 import com.tempo.app.scheduler.ScheduleGenerator;
+import com.tempo.app.scheduler.ScheduleService;
+import com.tempo.app.planning.GenerationPreflight;
+import com.tempo.app.planning.ScheduleEditRules;
+import com.tempo.app.ui.TimelineScale;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -42,6 +47,10 @@ import java.util.Map;
 import java.util.HashSet;
 import java.util.Set;
 import java.text.ParseException;
+import java.util.Collections;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Visual prototype for Home + a functional, resumable focus timer. */
 public class SchedulePreviewActivity extends AppCompatActivity {
@@ -59,9 +68,22 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private LinearLayout content;
     private LinearLayout timelineBody;
     private ScrollView timelineScroll;
+    private TimelineScale timelineScale;
+    private FrameLayout timelineCanvas;
     private boolean jumpToTime = true;
     private long pendingJumpDay = Long.MIN_VALUE;
+    private long generatedJumpMillis = Long.MIN_VALUE;
+    private long loadSequence;
+    // Single-flight across activity recreation; all scheduling runs off the main thread.
+    private static final AtomicBoolean GENERATING = new AtomicBoolean(false);
+    private static final ExecutorService GENERATION_EXECUTOR = Executors.newSingleThreadExecutor();
     private final Handler timeHandler = new Handler(Looper.getMainLooper());
+    private final Runnable generationPoll = new Runnable() {
+        @Override public void run() {
+            if (GENERATING.get()) timeHandler.postDelayed(this, 300);
+            else if (!isFinishing() && !isDestroyed()) loadData();
+        }
+    };
     private final Runnable timeTick = new Runnable() {
         @Override public void run() { if (content != null) render(); timeHandler.postDelayed(this, 60_000); }
     };
@@ -86,14 +108,27 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         super.onResume();
         if (content != null) loadData();
         timeHandler.postDelayed(timeTick, 60_000);
+        if (GENERATING.get()) timeHandler.postDelayed(generationPoll, 300);
     }
-    @Override protected void onPause() { timeHandler.removeCallbacks(timeTick); super.onPause(); }
+    @Override protected void onPause() {
+        timeHandler.removeCallbacks(timeTick);
+        timeHandler.removeCallbacks(generationPoll);
+        super.onPause();
+    }
+    @Override protected void onDestroy() {
+        timeHandler.removeCallbacksAndMessages(null);
+        super.onDestroy();
+    }
 
-    private void loadData() {
+    private void loadData() { loadData(false); }
+
+    private void loadData(boolean showFirstSession) {
         final long requestedDay = selectedDayMillis;
+        final long request = ++loadSequence;
         RepositoryProvider.getUserProfileRepository().getProfile(new TaskRepository.Callback<com.tempo.app.model.UserProfile>() {
             @Override public void onSuccess(com.tempo.app.model.UserProfile profile) {
-                if (profile != null && requestedDay == selectedDayMillis) {
+                if (profile != null && requestedDay == selectedDayMillis && request == loadSequence
+                        && !isFinishing() && !isDestroyed()) {
                     focusBreakMinutes = Math.max(0, profile.getBreakDuration()); render();
                 }
             }
@@ -101,7 +136,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         });
         RepositoryProvider.getTaskRepository().getAllTasks(new TaskRepository.Callback<List<Task>>() {
             @Override public void onSuccess(List<Task> result) {
-                if (requestedDay != selectedDayMillis) return;
+                if (requestedDay != selectedDayMillis || request != loadSequence || isFinishing() || isDestroyed()) return;
                 tasks.clear();
                 tasks.addAll(result);
                 demoData = tasks.isEmpty();
@@ -113,16 +148,24 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(selectedDayMillis));
                 RepositoryProvider.getScheduleRepository().getScheduleByDate(date, new TaskRepository.Callback<List<ScheduleItem>>() {
                     @Override public void onSuccess(List<ScheduleItem> rows) {
-                        if (requestedDay != selectedDayMillis) return;
+                        if (requestedDay != selectedDayMillis || request != loadSequence || isFinishing() || isDestroyed()) return;
                         schedule.clear(); schedule.addAll(rows);
                         if (demoData && selectedDayMillis == startOfDay(System.currentTimeMillis())) addDemoSchedule();
                         if (pendingJumpDay == requestedDay) { jumpToTime = true; pendingJumpDay = Long.MIN_VALUE; }
+                        if (showFirstSession && !rows.isEmpty()) {
+                            generatedJumpMillis = rows.get(0).getStartTime();
+                            jumpToTime = true;
+                        }
                         render();
                     }
-                    @Override public void onError(Exception error) { if (requestedDay == selectedDayMillis) render(); }
+                    @Override public void onError(Exception error) {
+                        if (requestedDay == selectedDayMillis && request == loadSequence && !isFinishing() && !isDestroyed()) render();
+                    }
                 });
             }
-            @Override public void onError(Exception error) { if (requestedDay == selectedDayMillis) render(); }
+            @Override public void onError(Exception error) {
+                if (requestedDay == selectedDayMillis && request == loadSequence && !isFinishing() && !isDestroyed()) render();
+            }
         });
     }
 
@@ -173,6 +216,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         row.addView(toggle);
         content.addView(row);
         spacer(8);
+        addGenerationAction();
+        spacer(8);
         if (demoData && !schedule.isEmpty()) {
             TextView demo = label("示例日程 · 用于预览排版，不会写入数据库", 12, MUTED, false);
             demo.setPadding(dp(22), 0, dp(22), 0);
@@ -200,7 +245,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             }
         }
         Set<Integer> dayTaskIds = new HashSet<>();
-        for (ScheduleItem item : schedule) dayTaskIds.add(item.getTaskId());
+        for (ScheduleItem item : schedule) if (!"CANCELLED".equals(item.getStatus())) dayTaskIds.add(item.getTaskId());
         int finished = 0;
         for (Integer id : dayTaskIds) {
             Task task = byId.get(id);
@@ -219,17 +264,148 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         addBottomBar();
         final int restoreY = previousScroll;
         final boolean jump = jumpToTime;
+        final long generatedTarget = generatedJumpMillis;
+        generatedJumpMillis = Long.MIN_VALUE;
         jumpToTime = false;
         ScrollView newScroll = timelineScroll;
         newScroll.post(() -> {
+            if (newScroll != timelineScroll) return;
             if (jump) {
                 Calendar target = Calendar.getInstance();
-                if (selectedDayMillis == startOfDay(System.currentTimeMillis())) target.setTimeInMillis(System.currentTimeMillis());
+                if (generatedTarget != Long.MIN_VALUE) target.setTimeInMillis(generatedTarget);
+                else if (selectedDayMillis == startOfDay(System.currentTimeMillis())) target.setTimeInMillis(System.currentTimeMillis());
                 else { target.setTimeInMillis(selectedDayMillis); target.set(Calendar.HOUR_OF_DAY, 8); target.set(Calendar.MINUTE, 0); }
                 int minute = target.get(Calendar.HOUR_OF_DAY) * 60 + target.get(Calendar.MINUTE);
-                newScroll.scrollTo(0, Math.max(0, minute * dp(96) / 60 - newScroll.getHeight() / 2));
+                int y = timelineCanvas.getTop() + dp(12) + Math.round(timelineScale.y(minute));
+                newScroll.scrollTo(0, Math.max(0, y - newScroll.getHeight() / 2));
             } else if (restoreY >= 0) newScroll.scrollTo(0, restoreY);
         });
+    }
+
+    private void addGenerationAction() {
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setPadding(dp(22), 0, dp(22), 0);
+        TextView hint = label(schedule.isEmpty() ? "先生成计划，再开始专注" : "按选中的日期安排", 12, MUTED, false);
+        LinearLayout.LayoutParams hintParams = new LinearLayout.LayoutParams(0, -2, 1);
+        hintParams.rightMargin = dp(12);
+        actions.addView(hint, hintParams);
+        TextView generate = label(GENERATING.get() ? "正在生成…" : "生成日程", 14, INK, true);
+        generate.setGravity(Gravity.CENTER);
+        generate.setPadding(dp(16), dp(12), dp(16), dp(12));
+        generate.setMinHeight(dp(48));
+        generate.setBackground(shape(MINT, 14));
+        generate.setEnabled(!GENERATING.get());
+        generate.setAlpha(GENERATING.get() ? .5f : 1f);
+        generate.setOnClickListener(v -> requestGeneration());
+        actions.addView(generate, new LinearLayout.LayoutParams(-2, -2));
+        content.addView(actions);
+    }
+
+    private void requestGeneration() {
+        if (GENERATING.get()) return;
+        final long requestedDay = selectedDayMillis;
+        try {
+            GenerationPreflight.checkDate(requestedDay, startOfDay(System.currentTimeMillis()));
+        } catch (GenerationPreflight.Problem problem) { showGenerationProblem(problem); return; }
+        if (getSharedPreferences("tempo_focus_timer", MODE_PRIVATE).getInt("taskId", Integer.MIN_VALUE) != Integer.MIN_VALUE) {
+            showGenerationProblem(new GenerationPreflight.Problem("请先结束并处理当前专注计时，再生成日程。", GenerationPreflight.Action.NONE));
+            return;
+        }
+        String date = new SimpleDateFormat("M月d日", Locale.CHINA).format(new Date(requestedDay));
+        new AlertDialog.Builder(this).setTitle("生成 " + date + " 的日程")
+                .setMessage("按已保存的作息、剩余用时和每日可用时间安排待办与进行中的任务。三餐各预留 30 分钟；当前尚未接入课程、会议等固定日程。\n\n重新生成会替换尚未开始的自动安排；已过去、手动调整和已完成的时段会保留。")
+                .setNegativeButton("取消", null)
+                .setPositiveButton("生成", (dialog, which) -> generateForDay(requestedDay)).show();
+    }
+
+    private void generateForDay(long requestedDay) {
+        if (!GENERATING.compareAndSet(false, true)) return;
+        render();
+        final String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(requestedDay));
+        GENERATION_EXECUTOR.execute(() -> {
+            try {
+                // Read fresh data: never schedule the negative-ID preview tasks in the UI.
+                GenerationPreflight.checkDate(requestedDay, startOfDay(System.currentTimeMillis()));
+                List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
+                GenerationPreflight.check(RepositoryProvider.getUserProfileRepository().getProfileSync(), pending);
+                // Same constraints as auto-scheduling (meal blocks and the productive window).
+                ScheduleGenerator.Result result = new ScheduleService().generateAndSave(date,
+                        new DefaultScheduleConstraints());
+                GENERATING.set(false);
+                timeHandler.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    selectedDayMillis = requestedDay;
+                    schedule.clear();
+                    pendingJumpDay = requestedDay;
+                    loadData(true);
+                    showGenerationResult(date, result, pending);
+                });
+            } catch (Exception error) {
+                GENERATING.set(false);
+                timeHandler.post(() -> {
+                    if (isFinishing() || isDestroyed()) return;
+                    render();
+                    showGenerationProblem(error);
+                });
+            }
+        });
+    }
+
+    private void showGenerationResult(String date, ScheduleGenerator.Result result, List<Task> pending) {
+        Map<Long, String> names = new HashMap<>();
+        for (Task task : pending) names.put((long) task.getTaskId(), task.getTitle());
+        Set<Long> arrangedTasks = new HashSet<>();
+        long totalMinutes = 0;
+        for (ScheduleGenerator.Session session : result.sessions) {
+            arrangedTasks.add(session.taskId);
+            totalMinutes += (session.interval.end - session.interval.start) / 60_000L;
+        }
+        StringBuilder message = new StringBuilder(date).append("\n\n");
+        if (result.sessions.isEmpty()) message.append("没有找到符合条件的可用时段。\n");
+        else message.append("已安排 ").append(arrangedTasks.size()).append(" 项任务，共 ")
+                .append(totalMinutes).append(" 分钟，分为 ").append(result.sessions.size()).append(" 段。\n")
+                .append("关闭后可点击时间轴上的任务，开始专注。\n");
+        if (!result.unscheduledTasks.isEmpty()) {
+            message.append("\n未排完的任务：\n");
+            int shown = 0;
+            for (ScheduleGenerator.UnscheduledTask task : result.unscheduledTasks) {
+                if (shown++ >= 8) { message.append("另有 ").append(result.unscheduledTasks.size() - 8).append(" 项未排完。\n"); break; }
+                message.append("• ").append(names.getOrDefault(task.taskId, "任务 " + task.taskId))
+                        .append("：剩余 ").append(task.remainingMinutes).append(" 分钟（")
+                        .append(task.reason == ScheduleGenerator.Reason.DEADLINE ? "截止时间前可用时间不足" : "当日可用时间或每日容量不足")
+                        .append("）\n");
+            }
+            message.append("\n请检查任务截止时间与档案设置。测试新流程时可添加一个无截止时间的短任务。");
+        }
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this)
+                .setTitle(result.sessions.isEmpty() ? "暂未排入日程" : "日程已生成")
+                .setMessage(message.toString()).setPositiveButton("知道了", null);
+        if (result.sessions.isEmpty()) dialog.setNeutralButton("添加任务", (d, which) -> addTaskForSelectedDay());
+        dialog.show();
+    }
+
+    private void showGenerationProblem(Exception error) {
+        GenerationPreflight.Action action = error instanceof GenerationPreflight.Problem
+                ? ((GenerationPreflight.Problem) error).action : GenerationPreflight.Action.NONE;
+        String message = error instanceof GenerationPreflight.Problem ? error.getMessage()
+                : "请检查任务条件、档案和手动锁定的安排是否冲突。\n\n详细信息：" + error.getMessage();
+        AlertDialog.Builder dialog = new AlertDialog.Builder(this).setTitle("暂时无法生成日程")
+                .setMessage(message).setNegativeButton("关闭", null);
+        if (action == GenerationPreflight.Action.PROFILE) {
+            dialog.setPositiveButton("设置档案", (d, which) -> startActivity(new Intent(this, ProfileSettingsActivity.class)));
+        } else if (action == GenerationPreflight.Action.ADD_TASK) {
+            dialog.setPositiveButton("添加任务", (d, which) -> addTaskForSelectedDay());
+        } else if (action == GenerationPreflight.Action.TODAY) {
+            dialog.setPositiveButton("回到今天", (d, which) -> {
+                selectedDayMillis = startOfDay(System.currentTimeMillis());
+                pendingJumpDay = selectedDayMillis;
+                jumpToTime = true;
+                schedule.clear();
+                render(); loadData();
+            });
+        }
+        dialog.show();
     }
 
     private void addWeekStrip() {
@@ -272,44 +448,65 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         content.addView(strip);
     }
 
+    private static final class TimelineEntry {
+        final TextView view;
+        final int start, end;
+        TimelineEntry(TextView view, int start, int end) { this.view = view; this.start = start; this.end = end; }
+    }
+
+    private int timelineMinute(long time) {
+        Calendar nextDay = Calendar.getInstance(); nextDay.setTimeInMillis(selectedDayMillis);
+        nextDay.add(Calendar.DAY_OF_MONTH, 1);
+        if (time >= nextDay.getTimeInMillis()) return 1440;
+        if (time < selectedDayMillis) return 0;
+        Calendar local = Calendar.getInstance(); local.setTimeInMillis(time);
+        return local.get(Calendar.HOUR_OF_DAY) * 60 + local.get(Calendar.MINUTE);
+    }
+
     private void addTimeline(List<ScheduleDisplayBlocks.Block> blocks, Map<Integer, Task> byId) {
-        int firstHour = 0, lastHour = 24;
-        final int hourHeight = dp(96);
+        TextView scaleNote = label("短时段自动展开 · 时长以起止时间为准", 11, MUTED, false);
+        scaleNote.setPadding(dp(62), 0, dp(10), dp(8));
+        if (!blocks.isEmpty()) timelineBody.addView(scaleNote);
         FrameLayout canvas = new FrameLayout(this);
+        timelineCanvas = canvas;
         canvas.setBackgroundColor(WHITE);
-        canvas.setLayoutParams(new LinearLayout.LayoutParams(-1, (lastHour - firstHour) * hourHeight + dp(24)));
-        for (int hour = firstHour; hour <= lastHour; hour++) {
-            int top = dp(12) + (hour - firstHour) * hourHeight;
-            TextView time = label(String.format(Locale.US, "%02d:00", hour), 11, MUTED, false);
-            FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(dp(48), dp(24));
-            tp.leftMargin = dp(10); tp.topMargin = top - dp(8); canvas.addView(time, tp);
-            View line = new View(this); line.setBackgroundColor(Color.rgb(231, 235, 231));
-            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, dp(1));
-            lp.leftMargin = dp(59); lp.topMargin = top; canvas.addView(line, lp);
-        }
+        canvas.setLayoutParams(new LinearLayout.LayoutParams(-1, dp(24 * 96 + 24)));
+        timelineBody.addView(canvas);
+        // Measure wrapped text at the available width, then use the same expanded axis everywhere.
+        int initialWidth = getResources().getDisplayMetrics().widthPixels;
+        drawTimeline(canvas, blocks, byId, initialWidth);
+        final int[] measuredWidth = {initialWidth};
+        canvas.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
+            int width = right - left;
+            if (width > 0 && width != measuredWidth[0]) {
+                measuredWidth[0] = width;
+                drawTimeline(canvas, blocks, byId, width);
+            }
+        });
+    }
+
+    private void drawTimeline(FrameLayout canvas, List<ScheduleDisplayBlocks.Block> blocks,
+                              Map<Integer, Task> byId, int width) {
+        canvas.removeAllViews();
+        List<TimelineEntry> entries = new ArrayList<>();
         for (ScheduleDisplayBlocks.Block block : blocks) {
             Task task = byId.get((int) block.taskId);
-            if (task == null) continue;
-            Calendar c = Calendar.getInstance(); c.setTimeInMillis(block.startMillis);
-            int startMinute = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
-            c.setTimeInMillis(block.endMillis);
-            int endMinute = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
-            if (endMinute <= startMinute) endMinute = 24 * 60;
-            int y = dp(12) + (startMinute - firstHour * 60) * hourHeight / 60;
-            int height = Math.max(dp(43), (endMinute - startMinute) * hourHeight / 60);
+            int start = timelineMinute(block.startMillis), end = timelineMinute(block.endMillis);
+            if (task == null || end <= start) continue;
             String duration = block.taskMinutes + " 分钟任务";
             if (includeBreaks && block.breakMinutes > 0) duration += " + " + block.breakMinutes + " 分钟休息";
-            TextView event = label(task.getTitle() + "\n" + clock(block.startMillis) + "–" + clock(block.endMillis)
-                    + "  ·  " + duration, 13, INK, true);
+            String description = task.getTitle() + "\n" + clock(block.startMillis) + "–" + clock(block.endMillis)
+                    + "  ·  " + duration;
+            TextView event = label(description, 13, INK, true);
             event.setGravity(Gravity.CENTER_VERTICAL);
-            event.setPadding(dp(12), dp(4), dp(8), dp(4));
+            event.setPadding(dp(12), dp(8), dp(8), dp(8));
+            event.setMinHeight(dp(48));
+            event.setContentDescription(description + ("COMPLETED".equals(task.getStatus()) ? "，已完成" : "，未完成"));
             event.setBackground(shape("COMPLETED".equals(task.getStatus()) ? Color.rgb(229, 233, 230)
                     : "Work".equals(task.getCategory()) ? Color.rgb(219, 231, 245)
                     : "Life".equals(task.getCategory()) ? Color.rgb(249, 233, 211) : MINT, 12));
             event.setOnClickListener(v -> openScheduleDetail(task, block));
-            FrameLayout.LayoutParams ep = new FrameLayout.LayoutParams(-1, height);
-            ep.leftMargin = dp(62); ep.rightMargin = dp(10); ep.topMargin = y + dp(2);
-            canvas.addView(event, ep);
+            entries.add(new TimelineEntry(event, start, end));
         }
         if (includeBreaks) {
             List<ScheduleGenerator.Session> ordered = new ArrayList<>();
@@ -318,35 +515,64 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                         new ScheduleGenerator.Interval(item.getStartTime(), item.getEndTime()), item.isManuallyEdited()));
             }
             for (ScheduleGenerator.Interval rest : restGaps(ordered)) {
-                Calendar c = Calendar.getInstance(); c.setTimeInMillis(rest.start);
-                int minute = c.get(Calendar.HOUR_OF_DAY) * 60 + c.get(Calendar.MINUTE);
-                int y = dp(12) + (minute - firstHour * 60) * hourHeight / 60;
+                int start = timelineMinute(rest.start), end = timelineMinute(rest.end);
+                boolean occupied = false;
+                for (ScheduleDisplayBlocks.Block block : blocks) {
+                    if (block.startMillis < rest.end && block.endMillis > rest.start) { occupied = true; break; }
+                }
+                if (end <= start || occupied) continue;
                 int length = (int) ((rest.end - rest.start) / 60_000L);
-                TextView restView = label("休息 " + length + " 分钟", 10, MUTED, true);
-                restView.setGravity(Gravity.CENTER);
-                restView.setBackground(shape(Color.rgb(230, 234, 229), 7));
-                FrameLayout.LayoutParams rp = new FrameLayout.LayoutParams(-1, length * hourHeight / 60);
-                rp.leftMargin = dp(62); rp.rightMargin = dp(10); rp.topMargin = y;
-                canvas.addView(restView, rp);
+                TextView restView = label("休息 " + length + " 分钟", 11, MUTED, false);
+                restView.setGravity(Gravity.CENTER_VERTICAL);
+                restView.setPadding(dp(12), dp(4), dp(8), dp(4));
+                restView.setMinHeight(dp(28));
+                restView.setBackground(shape(Color.rgb(240, 243, 239), 7));
+                entries.add(new TimelineEntry(restView, start, end));
             }
+        }
+        List<TimelineScale.Span> spans = new ArrayList<>();
+        int cardWidth = Math.max(1, width - dp(72));
+        for (TimelineEntry entry : entries) {
+            entry.view.measure(View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+            spans.add(new TimelineScale.Span(entry.start, entry.end, entry.view.getMeasuredHeight() + dp(4)));
+        }
+        TimelineScale scale = new TimelineScale(dp(96) / 60f, spans);
+        timelineScale = scale;
+        int canvasHeight = (int) Math.ceil(scale.y(1440)) + dp(24);
+        if (canvas.getLayoutParams().height != canvasHeight) {
+            canvas.getLayoutParams().height = canvasHeight;
+            canvas.requestLayout();
+        }
+        for (int hour = 0; hour <= 24; hour++) {
+            int top = dp(12) + Math.round(scale.y(hour * 60));
+            TextView time = label(String.format(Locale.US, "%02d:00", hour), 11, MUTED, false);
+            FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(dp(48), dp(24));
+            tp.leftMargin = dp(10); tp.topMargin = top - dp(8); canvas.addView(time, tp);
+            View line = new View(this); line.setBackgroundColor(Color.rgb(231, 235, 231));
+            FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, dp(1));
+            lp.leftMargin = dp(59); lp.topMargin = top; canvas.addView(line, lp);
+        }
+        for (TimelineEntry entry : entries) {
+            int startY = Math.round(scale.y(entry.start)), endY = Math.round(scale.y(entry.end));
+            FrameLayout.LayoutParams ep = new FrameLayout.LayoutParams(-1, endY - startY - dp(4));
+            ep.leftMargin = dp(62); ep.rightMargin = dp(10); ep.topMargin = dp(12) + startY + dp(2);
+            canvas.addView(entry.view, ep);
         }
         if (selectedDayMillis == startOfDay(System.currentTimeMillis())) {
             Calendar now = Calendar.getInstance();
             int nowMinute = now.get(Calendar.HOUR_OF_DAY) * 60 + now.get(Calendar.MINUTE);
-            if (nowMinute >= firstHour * 60 && nowMinute <= lastHour * 60) {
-                int y = dp(12) + (nowMinute - firstHour * 60) * hourHeight / 60;
-                int red = Color.rgb(235, 67, 55);
-                View marker = new View(this); marker.setBackgroundColor(red);
-                FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(-1, dp(2));
-                mp.leftMargin = dp(55); mp.topMargin = y; canvas.addView(marker, mp);
-                TextView timeBadge = label(new SimpleDateFormat("HH:mm", Locale.US).format(new Date()), 11, WHITE, true);
-                timeBadge.setGravity(Gravity.CENTER);
-                timeBadge.setBackground(shape(red, 7));
-                FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(50), dp(22));
-                bp.leftMargin = dp(3); bp.topMargin = y - dp(11); canvas.addView(timeBadge, bp);
-            }
+            int y = dp(12) + Math.round(scale.y(nowMinute));
+            int red = Color.rgb(235, 67, 55);
+            View marker = new View(this); marker.setBackgroundColor(red);
+            FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(-1, dp(2));
+            mp.leftMargin = dp(55); mp.topMargin = y; canvas.addView(marker, mp);
+            TextView timeBadge = label(new SimpleDateFormat("HH:mm", Locale.US).format(new Date()), 11, WHITE, true);
+            timeBadge.setGravity(Gravity.CENTER);
+            timeBadge.setBackground(shape(red, 7));
+            FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(50), dp(22));
+            bp.leftMargin = dp(3); bp.topMargin = y - dp(11); canvas.addView(timeBadge, bp);
         }
-        timelineBody.addView(canvas);
     }
 
     private List<ScheduleGenerator.Interval> restGaps(List<ScheduleGenerator.Session> source) {
@@ -470,7 +696,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         spacerIn(body, 8);
         body.addView(label("难度 " + task.getDifficulty() + "/5   ·   重要程度 " + task.getImportance() + "/5", 14, INK, false));
         spacerIn(body, 8);
-        body.addView(label("预估 " + task.getEstimatedDuration() + " 分钟   ·   "
+        body.addView(label("预估 " + task.getEstimatedDuration() + " 分钟 · 预测总用时 " + (task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration()) + " 分钟 · "
                 + categoryName(task.getCategory()), 14, MUTED, false));
         if (task.getDescription() != null && !task.getDescription().trim().isEmpty()) {
             spacerIn(body, 10); body.addView(label(task.getDescription(), 13, MUTED, false));
@@ -495,7 +721,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             editTask.setOnClickListener(v -> { detail.dismiss(); editTaskInfo(task); });
             body.addView(editTask); spacerIn(body, 10);
         }
-        TextView start = detailAction("开始专注  →", MINT);
+        TextView start = detailAction("COMPLETED".equals(task.getStatus()) ? "任务已完成" : "开始专注  →", MINT);
+        start.setEnabled(!"COMPLETED".equals(task.getStatus()));
         start.setOnClickListener(v -> { detail.dismiss(); openTimer(task); });
         body.addView(start);
         TextView close = label("关闭", 14, MUTED, false);
@@ -586,7 +813,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                         @Override public void onSuccess(Integer rows) {
                             if (rows == null || rows == 0) { showEditError("任务未找到，未保存"); return; }
                             dialog.dismiss();
-                            AutoScheduler.regenerateToday(new AutoScheduler.Listener() {
+                            AutoScheduler.regenerateToday(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
                                 @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) loadData(); }
                                 @Override public void onFailed(String error) {
                                     if (isFinishing()) return;
@@ -652,21 +879,13 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             if (task.getDeadline() > 0 && end > task.getDeadline()) {
                 showEditError("结束时间不能晚于任务截止时间"); return;
             }
-            int lockedMinutes = (int) ((end - start) / 60_000L);
-            for (ScheduleItem other : schedule) {
-                if (other != item && other.getTaskId() == task.getTaskId() && other.isManuallyEdited()) {
-                    lockedMinutes += (int) ((other.getEndTime() - other.getStartTime()) / 60_000L);
-                }
-            }
+            int lockedMinutes = ScheduleEditRules.lockedMinutes(schedule, item, start, end);
             int plannedMinutes = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
             if (plannedMinutes > 0 && lockedMinutes > plannedMinutes) {
                 showEditError("手动固定的总时间不能超过任务预计时长"); return;
             }
-            for (ScheduleItem other : schedule) {
-                if (other == item || (item.getScheduleId() > 0 && other.getScheduleId() == item.getScheduleId())) continue;
-                if (start < other.getEndTime() && other.getStartTime() < end) {
-                    showEditError("这个时间与另一项日程重叠"); return;
-                }
+            if (ScheduleEditRules.overlaps(schedule, item, start, end)) {
+                showEditError("这个时间与另一项日程重叠"); return;
             }
             if (item.getScheduleId() <= 0) {
                 item.setStartTime(start); item.setEndTime(end); item.setManuallyEdited(true);

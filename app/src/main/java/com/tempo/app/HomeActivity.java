@@ -141,6 +141,14 @@ public class HomeActivity extends AppCompatActivity {
             main.post(() -> startActivity(new Intent(HomeActivity.this, ProfileSettingsActivity.class)));
         }
 
+        @JavascriptInterface public void openInsights() {
+            main.post(() -> startActivity(new Intent(HomeActivity.this, InsightsActivity.class)));
+        }
+
+        @JavascriptInterface public void openHistory() {
+            main.post(() -> startActivity(new Intent(HomeActivity.this, SessionHistoryActivity.class)));
+        }
+
         @JavascriptInterface public void openAdd() {
             main.post(() -> {
                 Intent intent = new Intent(HomeActivity.this, AddTaskActivity.class);

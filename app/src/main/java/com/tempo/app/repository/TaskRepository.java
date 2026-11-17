@@ -133,7 +133,7 @@ public class TaskRepository {
         return taskDao.getPendingTasks();
     }
 
-    // Synchronous helpers for the home page and task completion (background thread only).
+    // Synchronous helpers for the home page (background thread only).
     public List<Task> getAllTasksSync() {
         return taskDao.getAllTasks();
     }
@@ -142,15 +142,7 @@ public class TaskRepository {
         return taskDao.getTaskById(taskId);
     }
 
-    public int updateTaskSync(Task task) {
-        return taskDao.updateTask(task);
-    }
-
     public List<TaskFeedback> getAllFeedbackSync() {
         return feedbackDao.getAllFeedback();
-    }
-
-    public long addFeedbackSync(TaskFeedback feedback) {
-        return feedbackDao.insertFeedback(feedback);
     }
 }

@@ -75,7 +75,7 @@ public final class DailyReview {
         Set<Integer> planned = new HashSet<>();
         int plannedMinutes = 0;
         if (daySchedule != null) for (ScheduleItem item : daySchedule) {
-            if (item == null) continue;
+            if (item == null || "CANCELLED".equals(item.getStatus())) continue; // cancelled after early completion
             planned.add(item.getTaskId());
             plannedMinutes += (int) Math.max(0, (item.getEndTime() - item.getStartTime()) / 60_000L);
         }

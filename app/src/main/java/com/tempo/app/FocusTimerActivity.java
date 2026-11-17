@@ -1,6 +1,11 @@
 package com.tempo.app;
 
 import android.app.AlertDialog;
+import android.content.Intent;
+import com.tempo.app.learning.LearningRepository;
+import com.tempo.app.learning.LearningStore;
+import com.tempo.app.learning.SessionTiming;
+import java.util.UUID;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Canvas;
@@ -22,7 +27,6 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.tempo.app.model.TaskFeedback;
 import com.tempo.app.repository.RepositoryProvider;
-import com.tempo.app.home.TaskCompletion;
 import com.tempo.app.repository.TaskRepository;
 
 import java.util.Locale;
@@ -44,11 +48,15 @@ public class FocusTimerActivity extends AppCompatActivity {
     private ProgressRingView progressRing;
     private int targetMinutes;
     private long previousFocusSeconds;
+    private LearningRepository learning;
+    private boolean preparing;
+    private static final int REVIEW_SESSION = 42;
     private final Runnable tick = this::refresh;
 
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         RepositoryProvider.init(this);
+        learning = new LearningRepository(this);
         taskId = getIntent().getIntExtra("taskId", Integer.MIN_VALUE);
         title = getIntent().getStringExtra("title");
         targetMinutes = getIntent().getIntExtra("targetMinutes", 0);
@@ -160,7 +168,7 @@ public class FocusTimerActivity extends AppCompatActivity {
         refresh();
     }
 
-    @Override protected void onDestroy() { handler.removeCallbacksAndMessages(null); super.onDestroy(); }
+    @Override protected void onDestroy() { handler.removeCallbacksAndMessages(null); if (learning != null) learning.close(); super.onDestroy(); }
     private SharedPreferences prefs() { return getSharedPreferences(PREF, MODE_PRIVATE); }
     private boolean isRunning() { return prefs().getInt("taskId", Integer.MIN_VALUE) == taskId && prefs().getLong("started", 0) > 0; }
     private long elapsed() {
@@ -169,15 +177,54 @@ public class FocusTimerActivity extends AppCompatActivity {
         return prefs().getLong("elapsed", 0) + (started > 0 ? Math.max(0, SystemClock.elapsedRealtime() - started) : 0);
     }
     private void start() {
+        if (preparing) return;
         int active = prefs().getInt("taskId", Integer.MIN_VALUE);
         if (active != Integer.MIN_VALUE && active != taskId) {
             new AlertDialog.Builder(this).setMessage("请先结束另一项任务的计时。")
                     .setPositiveButton("好的", null).show(); return;
         }
-        prefs().edit().putInt("taskId", taskId).putLong("started", SystemClock.elapsedRealtime()).apply();
+        if (taskId <= 0) { beginClock(); return; }
+        preparing = true; refresh();
+        learning.prepare(taskId, new TaskRepository.Callback<LearningStore.Prepared>() {
+            @Override public void onSuccess(LearningStore.Prepared result) {
+                preparing = false;
+                targetMinutes = result.prediction; previousFocusSeconds = result.previousMinutes * 60;
+                beginClock(); refresh();
+            }
+            @Override public void onError(Exception e) {
+                preparing = false; refresh();
+                new AlertDialog.Builder(FocusTimerActivity.this).setMessage(e.getMessage()).setPositiveButton("好的", null).show();
+            }
+        });
     }
-    private void pause() { prefs().edit().putLong("elapsed", elapsed()).putLong("started", 0).apply(); }
+    private void beginClock() {
+        SharedPreferences.Editor editor = prefs().edit().putInt("taskId", taskId).putLong("started", SystemClock.elapsedRealtime())
+                .putLong("startedWall",System.currentTimeMillis());
+        if(!prefs().contains("timingTrusted")) editor.putBoolean("timingTrusted",prefs().getLong("elapsed",0)==0);
+        if (prefs().getString("sessionToken", null) == null) editor.putString("sessionToken", UUID.randomUUID().toString());
+        editor.commit();
+    }
+    private void pause() {
+        long started=prefs().getLong("started",0), wall=prefs().getLong("startedWall",0);
+        long monotonic=SystemClock.elapsedRealtime(), elapsedAtPause=prefs().getLong("elapsed",0)+(started>0?Math.max(0,monotonic-started):0);
+        SharedPreferences.Editor edit=prefs().edit();
+        if(started>0) {
+            long end=System.currentTimeMillis();
+            if(SessionTiming.clocksAgree(wall,started,end,monotonic) && end>wall) {
+                String segments=prefs().getString("segments","");
+                edit.putString("segments",segments+(segments.isEmpty()?"":";")+wall+","+(wall+monotonic-started));
+            } else edit.putBoolean("timingTrusted",false);
+        }
+        edit.putLong("elapsed",elapsedAtPause).putLong("started",0).putLong("startedWall",0).commit();
+    }
     private void refresh() {
+        long savedStart=prefs().getLong("started",0),savedWall=prefs().getLong("startedWall",0);
+        if(prefs().getInt("taskId",Integer.MIN_VALUE)==taskId && savedStart>0 && savedWall>0
+                && !SessionTiming.clocksAgree(savedWall,savedStart,System.currentTimeMillis(),SystemClock.elapsedRealtime())) {
+            // Reboot or a wall-clock jump: stop the uncertain segment; retain already-paused elapsed time.
+            prefs().edit().putLong("started",0).putLong("startedWall",0).putBoolean("timingTrusted",false).commit();
+            android.widget.Toast.makeText(this,"Timer paused after a clock change. Review the recorded minutes before saving.",android.widget.Toast.LENGTH_LONG).show();
+        }
         long seconds = elapsed() / 1000;
         clock.setText(String.format(Locale.US, "%02d:%02d:%02d", seconds / 3600, (seconds / 60) % 60, seconds % 60));
         boolean running = isRunning();
@@ -193,64 +240,39 @@ public class FocusTimerActivity extends AppCompatActivity {
             progressRing.setProgress(0f);
             targetLabel.setText("暂无预计用时");
         }
+        toggle.setEnabled(!preparing);
+        finishAction.setEnabled(!preparing);
         toggle.setText(running ? "暂停计时" : seconds > 0 ? "继续专注" : "开始专注");
         finishAction.setAlpha(seconds > 0 ? 1f : 0.48f);
         handler.removeCallbacks(tick);
         handler.postDelayed(tick, 1000);
     }
     private void finishSession() {
-        int minutes = (int) Math.max(1, (elapsed() + 59_999) / 60_000);
-        LinearLayout panel = new LinearLayout(this);
-        panel.setOrientation(LinearLayout.VERTICAL);
-        panel.setPadding(dp(24), dp(26), dp(24), dp(20));
-        panel.setBackground(rounded(Color.WHITE, 22, false));
-        panel.addView(text("本次专注", 14, Color.rgb(52, 126, 91), true));
-        space(panel, 5);
-        panel.addView(text(minutes + " 分钟", 31, INK, true));
-        space(panel, 8);
-        panel.addView(text("确认后保存本次用时，任务仍留在待办列表。", 13,
-                Color.rgb(105, 120, 119), false));
-        space(panel, 24);
-        AlertDialog dialog = new AlertDialog.Builder(this).setView(panel).create();
-        TextView confirm = action("确认并保存", MINT, false);
-        panel.addView(confirm, new LinearLayout.LayoutParams(-1, dp(52)));
-        confirm.setOnClickListener(v -> { dialog.dismiss(); save(minutes); });
-        space(panel, 9);
-        TextView complete = action("Mark task done", BG, true);
-        panel.addView(complete, new LinearLayout.LayoutParams(-1, dp(52)));
-        complete.setOnClickListener(v -> { dialog.dismiss(); completeTask(minutes); });
-        space(panel, 9);
-        TextView discard = action("结束但不保存", BG, false);
-        panel.addView(discard, new LinearLayout.LayoutParams(-1, dp(48)));
-        discard.setOnClickListener(v -> { dialog.dismiss(); clear(); finish(); });
-        space(panel, 5);
-        TextView continueAction = text("继续计时", 14, Color.rgb(105, 120, 119), false);
-        continueAction.setGravity(Gravity.CENTER);
-        panel.addView(continueAction, new LinearLayout.LayoutParams(-1, dp(42)));
-        continueAction.setOnClickListener(v -> dialog.dismiss());
-        dialog.show();
-        if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+        if (preparing) return;
+        pause(); refresh();
+        if (taskId <= 0) {
+            new AlertDialog.Builder(this).setMessage("这是示例任务，不会保存反馈。请使用真实任务测试。")
+                    .setPositiveButton("结束", (d, w) -> { clear(); finish(); }).setNegativeButton("返回", null).show();
+            return;
+        }
+        String token = prefs().getString("sessionToken", null);
+        if (token == null) {
+            token = UUID.randomUUID().toString();
+            prefs().edit().putString("sessionToken", token).commit();
+        }
+        int minutes = (int) Math.min(Integer.MAX_VALUE, Math.max(1, (elapsed() + 59_999) / 60_000));
+        Intent intent = new Intent(this, TaskFeedbackActivity.class);
+        intent.putExtra("taskId", taskId); intent.putExtra("title", title);
+        intent.putExtra("sessionToken", token); intent.putExtra("minutes", minutes);
+        intent.putExtra("previousMinutes", previousFocusSeconds / 60);
+        intent.putExtra("segments",prefs().getString("segments",""));
+        intent.putExtra("timingTrusted",prefs().getBoolean("timingTrusted",false));
+        startActivityForResult(intent, REVIEW_SESSION);
     }
-    private void save(int minutes) {
-        if (taskId <= 0) { clear(); finish(); return; } // Demo task.
-        TaskFeedback feedback = new TaskFeedback();
-        feedback.setTaskId(taskId); feedback.setActualDuration(minutes);
-        feedback.setActualDifficulty(0); feedback.setCompletionStatus("PARTIAL");
-        feedback.setCompletedAt(System.currentTimeMillis());
-        RepositoryProvider.getTaskRepository().addFeedback(feedback, new TaskRepository.Callback<Long>() {
-            @Override public void onSuccess(Long id) { clear(); finish(); }
-            @Override public void onError(Exception error) { new AlertDialog.Builder(FocusTimerActivity.this)
-                    .setMessage("保存失败：" + error.getMessage()).setPositiveButton("好的", null).show(); }
-        });
-    }
-    /** Saves this session as the final one and marks the task COMPLETED. */
-    private void completeTask(int minutes) {
-        if (taskId <= 0) { clear(); finish(); return; } // Demo task.
-        TaskCompletion.complete(taskId, minutes, new TaskRepository.Callback<Void>() {
-            @Override public void onSuccess(Void ignored) { clear(); finish(); }
-            @Override public void onError(Exception error) { new AlertDialog.Builder(FocusTimerActivity.this)
-                    .setMessage("Could not save: " + error.getMessage()).setPositiveButton("OK", null).show(); }
-        });
+    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        super.onActivityResult(requestCode, resultCode, data);
+        if (requestCode == REVIEW_SESSION && resultCode == RESULT_OK) finish();
+        else refresh();
     }
     private void clear() { prefs().edit().clear().apply(); }
     private TextView text(String value, int size, int color, boolean bold) {
