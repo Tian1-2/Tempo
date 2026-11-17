@@ -363,7 +363,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
             @Override public void onSuccess(Long id) {
                 profile = updated;
                 // The routine changed, so re-plan today before leaving.
-                AutoScheduler.regenerateToday(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
+                AutoScheduler.replan(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Saved · today's plan updated"); }
                     @Override public void onFailed(String message) { done("Saved"); }
                 });
@@ -402,7 +402,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                     Toast.makeText(this, failure, Toast.LENGTH_LONG).show();
                     return;
                 }
-                AutoScheduler.regenerateToday(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
+                AutoScheduler.replan(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Sample data loaded"); }
                     @Override public void onFailed(String message) { done("Sample data loaded"); }
                 });

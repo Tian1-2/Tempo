@@ -28,6 +28,7 @@ import com.tempo.app.repository.RepositoryProvider;
 import com.tempo.app.repository.TaskRepository;
 import com.tempo.app.scheduler.AutoScheduler;
 import com.tempo.app.scheduler.ScheduleGenerator;
+import com.tempo.app.scheduler.ScheduleService;
 
 import java.text.SimpleDateFormat;
 import java.text.ParseException;
@@ -342,7 +343,7 @@ public class AddTaskActivity extends AppCompatActivity {
                 if(rows==null||rows==0){message("Task not found.");resetSave();return;}
                 setResult(RESULT_OK);
                 save.setText("Updating schedule…");
-                AutoScheduler.regenerateToday(AddTaskActivity.this, new AutoScheduler.Listener() {
+                AutoScheduler.replan(AddTaskActivity.this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) finish(); }
                     @Override public void onFailed(String error) { message(error); if (!isFinishing()) finish(); }
                 });
@@ -370,11 +371,11 @@ public class AddTaskActivity extends AppCompatActivity {
 
     /** After saving, runs the scheduler for today, then reads the recommended slots back. */
     private void scheduleAndShow(int taskId, String taskTitle) {
-        AutoScheduler.regenerateToday(AddTaskActivity.this, new AutoScheduler.Listener() {
+        AutoScheduler.replan(AddTaskActivity.this, new AutoScheduler.Listener() {
             @Override public void onScheduled(ScheduleGenerator.Result result) {
                 if (isFinishing() || isDestroyed()) return;
                 int left = AutoScheduler.remainingMinutes(result, taskId);
-                scheduleNote = left > 0 ? "Not enough time left today: " + left + " min could not be scheduled." : null;
+                scheduleNote = left > 0 ? "Not enough free time in the next " + ScheduleService.HORIZON_DAYS + " days: " + left + " min could not be planned." : null;
                 showRecommendation(taskId, taskTitle);
             }
             @Override public void onFailed(String error) {

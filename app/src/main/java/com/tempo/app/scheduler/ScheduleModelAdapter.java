@@ -34,6 +34,25 @@ public final class ScheduleModelAdapter {
         return result;
     }
 
+    /**
+     * Multi-day planning: removes minutes a task already has planned on other dates, so the same
+     * work is not planned twice. A task keeps at least the minutes locked on this date; a task with
+     * nothing left (and nothing locked here) is dropped.
+     */
+    public static List<ScheduleGenerator.Task> subtractPlanned(List<ScheduleGenerator.Task> tasks,
+            Map<Long, Integer> plannedElsewhere, Map<Long, Integer> lockedHere) {
+        List<ScheduleGenerator.Task> result = new ArrayList<>();
+        for (ScheduleGenerator.Task task : tasks) {
+            int elsewhere = plannedElsewhere.getOrDefault(task.id, 0);
+            int locked = lockedHere.getOrDefault(task.id, 0);
+            int minutes = Math.max(task.durationMinutes - elsewhere, locked);
+            if (minutes <= 0) continue;
+            result.add(minutes == task.durationMinutes ? task : new ScheduleGenerator.Task(task.id, minutes,
+                    task.deadlineMillis, task.importance, task.difficulty));
+        }
+        return result;
+    }
+
     public static List<Session> lockedSessions(List<ScheduleItem> existing) { return lockedSessions(existing, Long.MIN_VALUE); }
 
     public static List<Session> lockedSessions(List<ScheduleItem> existing, long earliest) {

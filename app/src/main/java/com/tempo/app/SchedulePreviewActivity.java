@@ -312,9 +312,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             showGenerationProblem(new GenerationPreflight.Problem("Finish the running focus timer before generating a plan.", GenerationPreflight.Action.NONE));
             return;
         }
-        String date = new SimpleDateFormat("MMM d", Locale.US).format(new Date(requestedDay));
-        new AlertDialog.Builder(this).setTitle("Generate plan for " + date)
-                .setMessage("Plans your pending and in-progress tasks using your saved routine, remaining time and daily task time. Each meal keeps 30 minutes free; fixed events such as classes are not included yet.\n\nRegenerating replaces automatic slots that have not started. Past, manually adjusted and completed slots are kept.")
+        new AlertDialog.Builder(this).setTitle("Plan the next " + ScheduleService.HORIZON_DAYS + " days")
+                .setMessage("Plans your pending and in-progress tasks from today on, using your saved routine, remaining time and daily task time. Work that does not fit today continues on the following days. Each meal keeps 30 minutes free; fixed events such as classes are not included yet.\n\nRegenerating replaces automatic slots that have not started. Past, manually adjusted and completed slots are kept.")
                 .setNegativeButton("Cancel", null)
                 .setPositiveButton("Generate", (dialog, which) -> generateForDay(requestedDay)).show();
     }
@@ -329,9 +328,9 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 GenerationPreflight.checkDate(requestedDay, startOfDay(System.currentTimeMillis()));
                 List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
                 GenerationPreflight.check(RepositoryProvider.getUserProfileRepository().getProfileSync(), pending);
-                // Same constraints as auto-scheduling (meal blocks and the productive window).
-                ScheduleGenerator.Result result = new ScheduleService().generateAndSave(date,
-                        new DefaultScheduleConstraints());
+                // Same multi-day planning and constraints as auto-scheduling (meal blocks, productive window).
+                ScheduleGenerator.Result result = new ScheduleService().generateRange(
+                        ScheduleService.HORIZON_DAYS, new DefaultScheduleConstraints());
                 GENERATING.set(false);
                 timeHandler.post(() -> {
                     if (isFinishing() || isDestroyed()) return;
@@ -339,7 +338,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                     schedule.clear();
                     pendingJumpDay = requestedDay;
                     loadData(true);
-                    showGenerationResult(date, result, pending);
+                    showGenerationResult("Next " + ScheduleService.HORIZON_DAYS + " days", result, pending);
                 });
             } catch (Exception error) {
                 GENERATING.set(false);
@@ -373,8 +372,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 if (shown++ >= 8) { message.append("…and ").append(result.unscheduledTasks.size() - 8).append(" more.\n"); break; }
                 message.append("• ").append(names.getOrDefault(task.taskId, "Task " + task.taskId))
                         .append(": ").append(task.remainingMinutes).append(" min left (")
-                        .append(task.reason == ScheduleGenerator.Reason.DEADLINE ? "not enough time before the deadline" : "not enough free time or daily task time")
-                        .append("）\n");
+                        .append(task.reason == ScheduleGenerator.Reason.DEADLINE ? "not enough time before the deadline" : "not enough free time in the next " + ScheduleService.HORIZON_DAYS + " days")
+                        .append(")\n");
             }
             message.append("\nCheck task deadlines and your profile. A short task without a deadline is the easiest way to test.");
         }
@@ -815,7 +814,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                         @Override public void onSuccess(Integer rows) {
                             if (rows == null || rows == 0) { showEditError("Task not found; nothing was saved."); return; }
                             dialog.dismiss();
-                            AutoScheduler.regenerateToday(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
+                            AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
                                 @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) loadData(); }
                                 @Override public void onFailed(String error) {
                                     if (isFinishing()) return;

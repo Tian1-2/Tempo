@@ -112,6 +112,18 @@ public final class ScheduleGenerator {
             this.sessions = Collections.unmodifiableList(sessions);
             this.unscheduledTasks = Collections.unmodifiableList(unscheduledTasks);
         }
+
+        /**
+         * Combines consecutive single-day results of a multi-day plan: all sessions, and the work
+         * still unplanned after the last day (each day re-plans what earlier days left over).
+         */
+        public static Result combine(List<Result> days) {
+            List<Session> all = new ArrayList<>();
+            for (Result day : days) all.addAll(day.sessions);
+            List<UnscheduledTask> left = days.isEmpty() ? new ArrayList<UnscheduledTask>()
+                    : new ArrayList<>(days.get(days.size() - 1).unscheduledTasks);
+            return new Result(all, left);
+        }
     }
 
     public Result generate(Request request) {

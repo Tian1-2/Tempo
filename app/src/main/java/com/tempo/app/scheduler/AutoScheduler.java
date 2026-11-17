@@ -19,8 +19,7 @@ import java.util.concurrent.Executors;
 
 /**
  * Entry point for pages: runs {@link ScheduleService} serially in the background and posts the result
- * to the main thread. Only "today" is scheduled, because the generator is single-day and scheduling
- * several dates would place the same task more than once.
+ * to the main thread. Plans a rolling window of days; see {@link ScheduleService#generateRange}.
  */
 public final class AutoScheduler {
     private static final String TAG = "AutoScheduler";
@@ -44,11 +43,12 @@ public final class AutoScheduler {
     }
 
     /**
-     * Regenerates today's automatic schedule; manually edited, past and completed slots are kept.
+     * Re-plans today and the next days ({@link ScheduleService#HORIZON_DAYS}); manually edited, past
+     * and completed slots are kept, and work that does not fit today continues on later days.
      * Skipped while a focus timer is running (same rule as the schedule page's Generate button).
      * Listener may be null; onScheduled receives null when there was nothing to schedule.
      */
-    public static void regenerateToday(Context context, Listener listener) {
+    public static void replan(Context context, Listener listener) {
         if (context.getSharedPreferences(TIMER_PREFS, Context.MODE_PRIVATE)
                 .getInt("taskId", Integer.MIN_VALUE) != Integer.MIN_VALUE) {
             post(listener, null, TIMER_ACTIVE);
@@ -73,8 +73,8 @@ public final class AutoScheduler {
                     }
                     return;
                 }
-                ScheduleGenerator.Result result =
-                        new ScheduleService().generateAndSave(date, new DefaultScheduleConstraints());
+                ScheduleGenerator.Result result = new ScheduleService()
+                        .generateRange(ScheduleService.HORIZON_DAYS, new DefaultScheduleConstraints());
                 post(listener, result, null);
             } catch (Exception e) {
                 Log.w(TAG, "Schedule generation failed for " + date, e);

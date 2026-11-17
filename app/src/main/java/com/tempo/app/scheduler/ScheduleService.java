@@ -17,9 +17,11 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 
 /** Reads the repositories, schedules one day, and saves generated rows. Call off the UI thread. */
@@ -72,22 +74,81 @@ public final class ScheduleService {
             if (c.moveToFirst()) usedToday = c.getLong(0);
         }
         int capacity = (int) Math.max(0, profile.getDailyCapacity() - usedToday);
+        List<ScheduleGenerator.Session> lockedHere = ScheduleModelAdapter.lockedSessions(existing, earliest);
+        Map<Long, Integer> lockedMinutes = new HashMap<>();
+        for (ScheduleGenerator.Session s : lockedHere) {
+            lockedMinutes.merge(s.taskId, (int) ((s.interval.end - s.interval.start) / MINUTE), Integer::sum);
+        }
+        // Work already planned on other dates is not planned again here (multi-day planning).
+        List<ScheduleGenerator.Task> tasks = ScheduleModelAdapter.subtractPlanned(
+                ScheduleModelAdapter.pendingTasks(pending, learning.remaining(pending, profile.getFocusDuration())),
+                plannedOnOtherDates(date, now), lockedMinutes);
         Set<Long> pendingIds = new HashSet<>();
-        for (Task task : pending) pendingIds.add((long) task.getTaskId());
+        for (ScheduleGenerator.Task task : tasks) pendingIds.add(task.id);
         List<ScheduleGenerator.Session> locked = new ArrayList<>();
-        for (ScheduleGenerator.Session session : ScheduleModelAdapter.lockedSessions(existing, earliest)) {
+        for (ScheduleGenerator.Session session : lockedHere) {
             // A locked slot whose task is no longer pending (e.g. completed) still occupies time but is not re-planned.
             if (pendingIds.contains(session.taskId)) locked.add(session);
             else blocked.add(session.interval);
         }
         ScheduleGenerator.Request request = new ScheduleGenerator.Request(day, earliest,
-                ScheduleModelAdapter.pendingTasks(pending, learning.remaining(pending, profile.getFocusDuration())),
+                tasks,
                 Collections.singletonList(new Interval(wake, sleep)), blocked,
                 locked, constraints.productiveWindows,
                 profile.getFocusDuration(), profile.getBreakDuration(), capacity);
         ScheduleGenerator.Result result = new ScheduleGenerator().generate(request);
         schedules.replaceGeneratedForDateSync(date, ScheduleModelAdapter.newScheduleItems(date, result), earliest);
         return result;
+    }
+
+    /** Days covered by {@link #generateRange}: today plus the next six days. */
+    public static final int HORIZON_DAYS = 7;
+
+    /**
+     * Plans today and the following days. Automatic slots that have not started are cleared first,
+     * then each day is generated in order; every day only plans what earlier days left over, so a
+     * task that does not fit today continues tomorrow instead of being planned twice. Manually
+     * adjusted, past and completed slots are kept. Call off the UI thread.
+     */
+    public ScheduleGenerator.Result generateRange(int days, ScheduleConstraintsProvider provider) {
+        if (days < 1) throw new IllegalArgumentException("days must be at least 1");
+        long now = System.currentTimeMillis();
+        long earliestToday = Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE;
+        Calendar cursor = Calendar.getInstance();
+        cursor.setTimeInMillis(now);
+        List<String> dates = new ArrayList<>();
+        SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
+        for (int i = 0; i < days; i++) {
+            dates.add(format.format(cursor.getTime()));
+            cursor.add(Calendar.DAY_OF_MONTH, 1);
+        }
+        ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
+        for (int i = 0; i < dates.size(); i++) {
+            schedules.replaceGeneratedForDateSync(dates.get(i), Collections.<ScheduleItem>emptyList(),
+                    i == 0 ? earliestToday : Long.MIN_VALUE);
+        }
+        List<ScheduleGenerator.Result> results = new ArrayList<>();
+        for (String date : dates) {
+            ScheduleGenerator.Result day = generateAndSave(date, provider);
+            results.add(day);
+            if (day.unscheduledTasks.isEmpty()) break; // everything fits: later days have nothing to add
+        }
+        return ScheduleGenerator.Result.combine(results);
+    }
+
+    /** Minutes per task still planned (not started) on other dates from today on. */
+    private static Map<Long, Integer> plannedOnOtherDates(String date, long now) {
+        Map<Long, Integer> planned = new HashMap<>();
+        String today = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(now));
+        // "now" is a long, inlined as a number: a bound string would compare as text inside MAX().
+        try (Cursor c = RepositoryProvider.getDatabaseHelper().getReadableDatabase().rawQuery(
+                "SELECT task_id, SUM((end_time - MAX(start_time, " + now + ")) / 60000) FROM schedule_items "
+                        + "WHERE status = 'PLANNED' AND scheduled_date <> ? AND scheduled_date >= ? AND end_time > " + now
+                        + " GROUP BY task_id",
+                new String[]{date, today})) {
+            while (c.moveToNext()) planned.put(c.getLong(0), (int) Math.max(0, c.getLong(1)));
+        }
+        return planned;
     }
 
     private static Calendar parseDate(String value) {
