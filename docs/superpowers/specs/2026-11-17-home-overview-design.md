@@ -9,8 +9,10 @@
 - 回顾先鼓励、后提醒，并给出评分。
 
 ## 方案
-- 选用：沿用现有页面的写法（Java 代码构建 View，米白/深蓝/薄荷绿），新增 `HomeActivity`；回顾和评分计算放在纯 Java 类 `home/DailyReview`，便于单元测试。
-- 不选：XML 布局 + Fragment——和现有页面写法不一致，两天内改造成本高。
+- 选用（2026-11-17 用户决定改为混合）：主页界面是本地 HTML 页面 `app/src/main/assets/home/index.html`，在 WebView 里显示；`HomeActivity` 在后台读数据库、算好回顾和评分（纯 Java 类 `home/DailyReview`，有单元测试），以 JSON 交给页面；页面通过 `window.Tempo` 桥（`getData / openSchedule / openAdd / openProfile / startFocus / finishGreeting`）请求跳转。作业要求明确允许 hybrid application。
+- 理由：HTML 能在浏览器里按手机尺寸逐像素检查，视觉可以打磨到位；其余页面仍是原生 Java。
+- 不选：纯 Java View——设计时看不到真实渲染效果，视觉难以打磨。
+- 浏览器预览：直接打开 `index.html` 会用内置演示数据；加 `?review` 查看早晨回顾页。
 
 ## 页面
 - **问候页**（每天 07:00–09:00 第一次打开时显示一次，用 SharedPreferences 记录日期）：早上好 + 日期；鼓励句 + 完成数 + 专注时长；评分；提醒（低估最多的任务）；“开始今天”按钮。

@@ -42,9 +42,12 @@ public final class DailyReview {
     public final boolean estimatesAccurate;
     /** 0-100; null when there is nothing to score. */
     public final Integer score;
+    /** Score components in percent; null when that part had no data. */
+    public final Integer completionPct, focusPct, accuracyPct;
 
     private DailyReview(int plannedTasks, int completedTasks, int plannedMinutes, int focusMinutes,
-                        Overrun overrun, boolean estimatesAccurate, Integer score) {
+                        Overrun overrun, boolean estimatesAccurate, Integer score,
+                        Integer completionPct, Integer focusPct, Integer accuracyPct) {
         this.plannedTasks = plannedTasks;
         this.completedTasks = completedTasks;
         this.plannedMinutes = plannedMinutes;
@@ -52,6 +55,9 @@ public final class DailyReview {
         this.overrun = overrun;
         this.estimatesAccurate = estimatesAccurate;
         this.score = score;
+        this.completionPct = completionPct;
+        this.focusPct = focusPct;
+        this.accuracyPct = accuracyPct;
     }
 
     /**
@@ -115,21 +121,30 @@ public final class DailyReview {
 
         double weighted = 0;
         int weights = 0;
+        Double completionPart = null, focusPart = null, accuracyPart = null;
         if (!planned.isEmpty()) {
-            weighted += WEIGHT_COMPLETION * (completed / (double) planned.size());
+            completionPart = completed / (double) planned.size();
+            weighted += WEIGHT_COMPLETION * completionPart;
             weights += WEIGHT_COMPLETION;
         }
         if (plannedMinutes > 0) {
-            weighted += WEIGHT_FOCUS * Math.min(1.0, focus / (double) plannedMinutes);
+            focusPart = Math.min(1.0, focus / (double) plannedMinutes);
+            weighted += WEIGHT_FOCUS * focusPart;
             weights += WEIGHT_FOCUS;
         }
         if (accuracySamples > 0) {
-            weighted += WEIGHT_ACCURACY * (accuracySum / accuracySamples);
+            accuracyPart = accuracySum / accuracySamples;
+            weighted += WEIGHT_ACCURACY * accuracyPart;
             weights += WEIGHT_ACCURACY;
         }
         Integer score = weights == 0 ? null : (int) Math.round(100 * weighted / weights);
         return new DailyReview(planned.size(), completed, plannedMinutes, focus, worst,
-                worst == null && accuracySamples > 0, score);
+                worst == null && accuracySamples > 0, score,
+                percent(completionPart), percent(focusPart), percent(accuracyPart));
+    }
+
+    private static Integer percent(Double part) {
+        return part == null ? null : (int) Math.round(part * 100);
     }
 
     /** Nothing was planned and nothing was timed. */

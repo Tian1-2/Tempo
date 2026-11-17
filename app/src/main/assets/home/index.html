@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Tempo Home</title>
+<style>
+  :root {
+    --bg: #F7F8F5; --ink: #1E3034; --ink-2: #2B4448; --muted: #6E7E7C; --line: #E4EAE5;
+    --mint: #C2E8D5; --mint-soft: #E9F5EE; --green: #347E5B; --card: #FFFFFF;
+    --warm: #B26B1F; --warm-soft: #FFF4E5;
+    --study: #3F8F6B; --work: #4C6FB5; --life: #D08A3E;
+    --shadow: 0 1px 2px rgba(30,48,52,.04), 0 8px 24px rgba(30,48,52,.07);
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--ink); }
+  body {
+    font-family: system-ui, -apple-system, "Google Sans", Roboto, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased; overscroll-behavior: none;
+  }
+  .page { max-width: 480px; margin: 0 auto; padding: 18px 20px 120px; }
+  .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .14em; color: var(--green); text-transform: uppercase; }
+  .muted { color: var(--muted); }
+  .card { background: var(--card); border-radius: 24px; box-shadow: var(--shadow); padding: 18px; }
+  button { font: inherit; border: 0; cursor: pointer; }
+  .fade { opacity: 0; transform: translateY(8px); animation: rise .45s cubic-bezier(.2,.7,.2,1) forwards; }
+  @keyframes rise { to { opacity: 1; transform: none; } }
+
+  /* Header */
+  .top { position: relative; padding: 10px 2px 18px; }
+  .top::before {
+    content: ""; position: absolute; inset: -40px -40px 0 -40px; z-index: -1;
+    background: radial-gradient(120% 90% at 0% 0%, #DDF1E6 0%, rgba(247,248,245,0) 60%);
+  }
+  .hello { font-size: 14px; color: var(--muted); }
+  .day { font-size: 36px; line-height: 1.05; font-weight: 800; letter-spacing: -.02em; margin-top: 4px; }
+  .date { font-size: 15px; color: var(--muted); margin-top: 4px; }
+  .head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+    background: var(--card); color: var(--green); font-weight: 700; font-size: 13px;
+    padding: 8px 12px; border-radius: 999px; box-shadow: var(--shadow); margin-top: 22px;
+  }
+  .pill b { color: var(--ink); }
+
+  /* Today summary */
+  .summary { display: flex; align-items: center; gap: 16px; }
+  .ring { position: relative; flex: none; }
+  .ring svg { display: block; transform: rotate(-90deg); }
+  .ring .arc { transition: stroke-dashoffset 1s cubic-bezier(.2,.7,.2,1); }
+  .ring .center { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; }
+  .summary h2 { margin: 4px 0 2px; font-size: 18px; }
+  .stats { display: flex; gap: 14px; margin-top: 8px; font-size: 13px; color: var(--muted); }
+  .stats { flex-wrap: wrap; }
+  .stats span { white-space: nowrap; }
+  .stats b { color: var(--ink); font-weight: 700; }
+
+  /* Hero */
+  .hero {
+    position: relative; overflow: hidden; margin-top: 14px; padding: 20px; border-radius: 26px;
+    background: linear-gradient(145deg, #23393D 0%, #1A2A2D 100%); color: #fff; box-shadow: 0 14px 30px rgba(30,48,52,.22);
+  }
+  .hero::after {
+    content: ""; position: absolute; width: 220px; height: 220px; right: -70px; top: -90px; border-radius: 50%;
+    background: radial-gradient(circle, rgba(194,232,213,.28), rgba(194,232,213,0) 70%);
+  }
+  .hero .eyebrow { color: var(--mint); }
+  .hero h3 { margin: 10px 0 6px; font-size: 22px; line-height: 1.2; }
+  .hero .meta { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #A9BAB8; }
+  .tag { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+  .hero .tag { background: rgba(255,255,255,.1); color: #E6F2EC; }
+  .go {
+    position: relative; z-index: 1; margin-top: 18px; width: 100%; height: 48px; border-radius: 16px;
+    background: var(--mint); color: var(--ink); font-weight: 800; font-size: 15px;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+  }
+  .go:active, .cta:active, .fab:active { transform: scale(.98); }
+
+  /* Notice */
+  .notice { margin-top: 14px; background: var(--mint-soft); box-shadow: none; display: flex; gap: 12px; align-items: center; }
+  .notice .ico { width: 36px; height: 36px; border-radius: 12px; background: var(--card); display: grid; place-items: center; flex: none; }
+
+  /* Timeline */
+  .section { display: flex; align-items: baseline; justify-content: space-between; margin: 26px 2px 12px; }
+  .section a { font-size: 13px; font-weight: 700; color: var(--green); text-decoration: none; }
+  .tl { position: relative; }
+  .item { display: grid; grid-template-columns: 46px 18px 1fr; column-gap: 10px; align-items: start; }
+  .time { font-size: 13px; font-weight: 700; color: var(--muted); padding-top: 14px; text-align: right; font-variant-numeric: tabular-nums; }
+  .rail { position: relative; height: 100%; }
+  .rail::before { content: ""; position: absolute; left: 8px; top: 0; bottom: 0; width: 2px; background: var(--line); }
+  .item:first-child .rail::before { top: 18px; }
+  .item:last-child .rail::before { bottom: calc(100% - 18px); }
+  .dot { position: absolute; left: 3px; top: 13px; width: 12px; height: 12px; border-radius: 50%; border: 2px solid var(--bg); }
+  .item.now .dot { left: 0; top: 10px; width: 18px; height: 18px; box-shadow: 0 0 0 4px var(--mint-soft); }
+  .task { background: var(--card); border-radius: 18px; box-shadow: var(--shadow); padding: 12px 14px; margin-bottom: 10px; display: flex; align-items: center; gap: 10px; }
+  .task .t { flex: 1; min-width: 0; }
+  .task .name { font-weight: 700; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .task .sub { font-size: 12px; color: var(--muted); margin-top: 3px; display: flex; gap: 6px; align-items: center; }
+  .task.done { background: transparent; box-shadow: none; border: 1.5px dashed var(--line); }
+  .task.done .name { color: var(--muted); text-decoration: line-through; }
+  .check { width: 24px; height: 24px; border-radius: 50%; background: var(--mint); display: grid; place-items: center; flex: none; }
+  .empty { text-align: center; padding: 26px 20px; }
+  .empty .big { font-size: 34px; }
+
+  /* Bottom bar */
+  .bar {
+    position: fixed; left: 50%; transform: translateX(-50%); bottom: 16px; width: calc(100% - 32px); max-width: 448px;
+    height: 68px; border-radius: 24px; background: rgba(255,255,255,.92); backdrop-filter: blur(12px);
+    box-shadow: 0 10px 30px rgba(30,48,52,.14); display: grid; grid-template-columns: 1fr 76px 1fr; align-items: center;
+  }
+  .nav { background: none; display: flex; flex-direction: column; align-items: center; gap: 3px; color: var(--muted); font-size: 11px; font-weight: 700; }
+  .nav svg { width: 22px; height: 22px; stroke: var(--ink); }
+  .fab { justify-self: center; width: 56px; height: 56px; border-radius: 19px; background: var(--ink); display: grid; place-items: center; box-shadow: 0 8px 18px rgba(30,48,52,.3); margin-top: -18px; }
+
+  /* Review */
+  .review-head { padding: 22px 2px 6px; text-align: left; }
+  .review-head .day { font-size: 34px; }
+  .score { text-align: center; padding: 24px 18px 22px; margin-top: 18px; }
+  .score .num { font-size: 46px; font-weight: 800; letter-spacing: -.02em; line-height: 1; }
+  .score .lbl { font-size: 13px; font-weight: 800; color: var(--green); margin-top: 4px; }
+  .cheer { font-size: 17px; font-weight: 700; line-height: 1.35; margin: 16px 6px 0; }
+  .chips { display: flex; justify-content: center; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .chip { background: var(--mint-soft); color: var(--green); font-weight: 700; font-size: 13px; padding: 7px 12px; border-radius: 999px; }
+  .weights { font-size: 11px; color: var(--muted); margin-top: 14px; }
+  .bars { display: grid; gap: 8px; margin-top: 16px; text-align: left; }
+  .bars .r { display: grid; grid-template-columns: 82px 1fr 34px; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+  .bars .track { height: 6px; border-radius: 3px; background: var(--mint-soft); overflow: hidden; }
+  .bars .fill { height: 100%; border-radius: 3px; background: var(--green); width: 0; transition: width 1s cubic-bezier(.2,.7,.2,1); }
+  .bars .v { text-align: right; font-weight: 700; color: var(--ink); }
+  .tip { margin-top: 14px; border-radius: 22px; padding: 16px 18px; }
+  .tip.warn { background: var(--warm-soft); }
+  .tip.warn .eyebrow { color: var(--warm); }
+  .tip.good { background: var(--mint-soft); }
+  .tip p { margin: 8px 0 0; font-size: 14px; line-height: 1.5; }
+  .cta { width: 100%; height: 56px; border-radius: 18px; background: var(--ink); color: #fff; font-weight: 800; font-size: 16px; margin-top: 22px; display: flex; align-items: center; justify-content: center; gap: 10px; }
+</style>
+</head>
+<body>
+<main class="page" id="app"></main>
+
+<script>
+(function () {
+  "use strict";
+  var bridge = window.Tempo; // Provided by HomeActivity; absent when previewing in a desktop browser.
+  var CAT = { Study: "var(--study)", Work: "var(--work)", Life: "var(--life)" };
+  var showingReview = null;
+
+  function demo() {
+    return {
+      greeting: "Good afternoon", dayName: "Tuesday", dateText: "November 17", longDate: "Tuesday, November 17",
+      showReview: false, hasProfile: true,
+      today: { planned: 4, completed: 1, focusText: "50 min", plannedText: "4 h 15 min" },
+      next: { taskId: 2, title: "COMP7506 assignment", category: "Study", timeText: "14:00 – 15:30", label: "In 25 min", now: false },
+      rows: [
+        { taskId: 1, title: "Revision", category: "Study", startText: "09:30", minutes: "1 h", done: true, current: false },
+        { taskId: 2, title: "COMP7506 assignment", category: "Study", startText: "14:00", minutes: "1 h 30 min", done: false, current: true },
+        { taskId: 3, title: "Read paper", category: "Work", startText: "16:00", minutes: "45 min", done: false, current: false },
+        { taskId: 4, title: "Gym", category: "Life", startText: "19:00", minutes: "1 h", done: false, current: false }
+      ],
+      yesterday: {
+        empty: false, planned: 4, completed: 3, focusText: "2 h 10 min", score: 82, scoreLabel: "Great",
+        completionPct: 75, focusPct: 100, accuracyPct: 67,
+        encouragement: "You finished 3 tasks yesterday. Steady progress!",
+        reminder: "“COMP7506 assignment” was estimated at 1 h but took 1 h 40 min.\nLeave a little extra time for similar tasks today.",
+        overrun: true
+      }
+    };
+  }
+
+  function data() {
+    if (!bridge) return demo();
+    var raw = bridge.getData();
+    return raw ? JSON.parse(raw) : null;
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  function call(name, arg) { if (bridge && bridge[name]) arg === undefined ? bridge[name]() : bridge[name](arg); }
+  function color(cat) { return CAT[cat] || CAT.Study; }
+
+  function ring(size, stroke, pct, inner) {
+    var r = (size - stroke) / 2, c = 2 * Math.PI * r;
+    return '<div class="ring" style="width:' + size + 'px;height:' + size + 'px">' +
+      '<svg width="' + size + '" height="' + size + '"><circle cx="' + size / 2 + '" cy="' + size / 2 + '" r="' + r +
+      '" fill="none" stroke="#E9F5EE" stroke-width="' + stroke + '"/><circle class="arc" cx="' + size / 2 + '" cy="' + size / 2 +
+      '" r="' + r + '" fill="none" stroke="#347E5B" stroke-linecap="round" stroke-width="' + stroke +
+      '" stroke-dasharray="' + c + '" stroke-dashoffset="' + c + '" data-target="' + (c * (1 - Math.max(0, Math.min(1, pct)))) + '"/></svg>' +
+      '<div class="center">' + inner + '</div></div>';
+  }
+
+  var ICON = {
+    cal: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="15.5" rx="4"/><path d="M8 3v4M16 3v4M3.5 10h17"/></svg>',
+    user: '<svg viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8.5" r="3.8"/><path d="M4.5 20c1.4-3.6 4.2-5.3 7.5-5.3s6.1 1.7 7.5 5.3"/></svg>',
+    plus: '<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>',
+    play: '<svg width="14" height="14" viewBox="0 0 24 24"><path d="M7 4.5v15l12.5-7.5z" fill="#1E3034"/></svg>',
+    check: '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#347E5B" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>',
+    arrow: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+    sun: '<svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="#D08A3E" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4"/></svg>',
+    gear: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#347E5B" stroke-width="1.9" stroke-linecap="round"><circle cx="12" cy="12" r="3.2"/><path d="M12 3v2.2M12 18.8V21M3 12h2.2M18.8 12H21M5.6 5.6l1.6 1.6M16.8 16.8l1.6 1.6M5.6 18.4l1.6-1.6M16.8 7.2l1.6-1.6"/></svg>'
+  };
+
+  function overview(d) {
+    var y = d.yesterday, t = d.today, h = "";
+    h += '<header class="top fade"><div class="head-row"><div>' +
+      '<div class="hello">' + esc(d.greeting) + '</div>' +
+      '<div class="day">' + esc(d.dayName) + '</div><div class="date">' + esc(d.dateText) + '</div></div>' +
+      '<button class="pill" data-act="review">Yesterday' + (y && y.score != null ? ' <b>' + y.score + '</b>' : '') + ' ›</button></div></header>';
+
+    if (!d.hasProfile) {
+      h += '<button class="card notice fade" data-act="profile" style="width:100%;text-align:left">' +
+        '<span class="ico">' + ICON.gear + '</span><span><div style="font-weight:800;font-size:15px">Set up your rhythm</div>' +
+        '<div class="muted" style="font-size:13px;margin-top:2px">Wake, sleep and meal times let Tempo plan your day.</div></span></button>';
+    }
+
+    var pct = t.planned ? t.completed / t.planned : 0;
+    h += '<section class="card summary fade" style="margin-top:14px;animation-delay:.05s">' +
+      ring(76, 9, pct, '<div style="font-weight:800;font-size:17px">' + t.completed + '<span class="muted" style="font-weight:700;font-size:13px">/' + t.planned + '</span></div>') +
+      '<div><div class="eyebrow">Today</div><h2>' + (t.planned ? (t.completed === t.planned ? "All done. Nice work!" : (t.planned - t.completed) + (t.planned - t.completed === 1 ? " task" : " tasks") + " to go") : "A clear day") + '</h2>' +
+      '<div class="stats"><span><b>' + esc(t.focusText) + '</b> focused</span><span><b>' + esc(t.plannedText) + '</b> planned</span></div></div></section>';
+
+    if (d.next) {
+      h += '<section class="hero fade" style="animation-delay:.1s"><div class="eyebrow">' + (d.next.now ? "Now" : "Next up · " + esc(d.next.label)) + '</div>' +
+        '<h3>' + esc(d.next.title) + '</h3><div class="meta"><span>' + esc(d.next.timeText) + '</span><span class="tag">' + esc(d.next.category) + '</span></div>' +
+        '<button class="go" data-act="focus" data-id="' + d.next.taskId + '">' + ICON.play + ' Start focus</button></section>';
+    }
+
+    h += '<div class="section fade" style="animation-delay:.15s"><div class="eyebrow">Today’s plan</div><a data-act="schedule">Open schedule</a></div>';
+    if (!d.rows.length) {
+      h += '<section class="card empty fade" style="animation-delay:.2s"><div class="big">🌱</div>' +
+        '<div style="font-weight:800;margin-top:6px">Nothing planned yet</div>' +
+        '<div class="muted" style="font-size:13px;margin-top:4px">Tap + to add a task. Tempo will find the time for it.</div></section>';
+    } else {
+      h += '<div class="tl">';
+      d.rows.forEach(function (r, i) {
+        h += '<div class="item fade' + (r.current ? ' now' : '') + '" style="animation-delay:' + (0.2 + i * 0.05) + 's">' +
+          '<div class="time">' + esc(r.startText) + '</div><div class="rail"><span class="dot" style="background:' + color(r.category) + '"></span></div>' +
+          '<div class="task' + (r.done ? ' done' : '') + '"' + (r.done ? '' : ' data-act="focus" data-id="' + r.taskId + '"') + '><div class="t"><div class="name">' + esc(r.title) + '</div>' +
+          '<div class="sub"><span>' + esc(r.minutes) + '</span><span>·</span><span style="color:' + color(r.category) + ';font-weight:700">' + esc(r.category) + '</span></div></div>' +
+          (r.done ? '<span class="check">' + ICON.check + '</span>' : '') + '</div></div>';
+      });
+      h += '</div>';
+    }
+
+    h += '<nav class="bar"><button class="nav" data-act="schedule">' + ICON.cal + 'Schedule</button>' +
+      '<button class="fab" data-act="add" aria-label="Add task">' + ICON.plus + '</button>' +
+      '<button class="nav" data-act="profile">' + ICON.user + 'Profile</button></nav>';
+    return h;
+  }
+
+  function review(d) {
+    var y = d.yesterday, h = "";
+    h += '<header class="review-head fade"><div class="hello">' + esc(d.longDate) + '</div>' +
+      '<div class="head-row"><div class="day">' + esc(d.greeting) + '</div>' + ICON.sun + '</div></header>';
+    if (!y || y.empty) {
+      h += '<section class="card empty fade" style="margin-top:18px;animation-delay:.05s"><div class="big">🌤️</div>' +
+        '<div style="font-weight:800;font-size:18px;margin-top:6px">A brand new day. You’ve got this!</div>' +
+        '<div class="muted" style="font-size:14px;margin-top:6px;line-height:1.5">Nothing was tracked yesterday. Add a task and Tempo will fit it into your day.</div></section>';
+    } else {
+      h += '<section class="card score fade" style="animation-delay:.05s"><div class="eyebrow">' + (y.score != null ? "Yesterday’s score" : "Yesterday") + '</div>';
+      if (y.score != null) {
+        h += '<div style="display:flex;justify-content:center;margin-top:14px">' +
+          ring(168, 13, y.score / 100, '<div><div class="num" data-count="' + y.score + '">0</div><div class="lbl">' + esc(y.scoreLabel) + '</div></div>') + '</div>';
+      }
+      h += '<div class="cheer">' + esc(y.encouragement) + '</div>' +
+        '<div class="chips"><span class="chip">✓ ' + y.completed + ' / ' + y.planned + ' done</span><span class="chip">◷ ' + esc(y.focusText) + ' focused</span></div>';
+      if (y.score != null) {
+        h += '<div class="bars">' + bar("Completion", y.completionPct) + bar("Focus time", y.focusPct) + bar("Estimates", y.accuracyPct) + '</div>' +
+          '<div class="weights">Score = completion 50% · focus 30% · estimates 20%</div>';
+      }
+      h += '</section>';
+      if (y.reminder) {
+        h += '<section class="tip fade ' + (y.overrun ? 'warn' : 'good') + '" style="animation-delay:.12s"><div class="eyebrow">' +
+          (y.overrun ? "Heads-up" : "Nice") + '</div><p>' + esc(y.reminder).replace(/\n/g, "<br>") + '</p></section>';
+      }
+    }
+    h += '<button class="cta fade" data-act="start" style="animation-delay:.18s">Start my day ' + ICON.arrow + '</button>';
+    return h;
+  }
+
+  function bar(label, pct) {
+    if (pct == null) return "";
+    return '<div class="r"><span>' + label + '</span><div class="track"><div class="fill" data-w="' + pct + '"></div></div><span class="v">' + pct + '%</span></div>';
+  }
+
+  function animate(root) {
+    requestAnimationFrame(function () {
+      requestAnimationFrame(function () {
+        root.querySelectorAll(".arc").forEach(function (a) { a.style.strokeDashoffset = a.getAttribute("data-target"); });
+        root.querySelectorAll(".fill").forEach(function (f) { f.style.width = f.getAttribute("data-w") + "%"; });
+        root.querySelectorAll("[data-count]").forEach(function (n) {
+          var target = +n.getAttribute("data-count"), start = performance.now();
+          (function step(now) {
+            var p = Math.min(1, (now - start) / 900);
+            n.textContent = Math.round(target * (1 - Math.pow(1 - p, 3)));
+            if (p < 1) requestAnimationFrame(step);
+          })(start);
+        });
+      });
+    });
+  }
+
+  function render() {
+    var d = data(), app = document.getElementById("app");
+    if (!d) { app.innerHTML = ""; return; }
+    if (showingReview === null) showingReview = !!d.showReview;
+    app.innerHTML = showingReview ? review(d) : overview(d);
+    window.scrollTo(0, 0);
+    animate(app);
+  }
+
+  document.addEventListener("click", function (e) {
+    var el = e.target.closest("[data-act]");
+    if (!el) return;
+    var act = el.getAttribute("data-act");
+    if (act === "review") { showingReview = true; render(); }
+    else if (act === "start") { showingReview = false; call("finishGreeting"); render(); }
+    else if (act === "schedule") call("openSchedule");
+    else if (act === "add") call("openAdd");
+    else if (act === "profile") call("openProfile");
+    else if (act === "focus") call("startFocus", +el.getAttribute("data-id"));
+  });
+
+  // HomeActivity calls this whenever fresh data is ready (first load and every onResume).
+  window.tempoRender = function () { render(); };
+  if (!bridge) {
+    // Desktop preview: ?review shows the morning review.
+    showingReview = location.search.indexOf("review") >= 0;
+    render();
+  }
+})();
+</script>
+</body>
+</html>
