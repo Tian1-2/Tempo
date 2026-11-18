@@ -92,6 +92,8 @@ public class InsightsActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(root);
         content = findViewById(R.id.insights_content);
         scroll = findViewById(R.id.insights_scroll);
+        ((android.widget.LinearLayout) root).addView(com.tempo.app.ui.BottomNav.create(this,
+                com.tempo.app.ui.BottomNav.Tab.INSIGHTS, null));
 
         tabs = findViewById(R.id.insights_tabs);
         ViewCompat.setAccessibilityHeading(findViewById(R.id.insights_title), true);

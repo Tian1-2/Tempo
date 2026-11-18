@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Same icon as the Home page bottom bar (assets/home/index.html). -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp" android:viewportWidth="24" android:viewportHeight="24">
+    <path android:pathData="M8.2,8.5a3.8,3.8 0,1 0,7.6 0a3.8,3.8 0,1 0,-7.6 0z M4.5,20c1.4,-3.6 4.2,-5.3 7.5,-5.3s6.1,1.7 7.5,5.3" android:strokeColor="#FF1F3034" android:strokeWidth="1.8"
+        android:strokeLineCap="round" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+</vector>

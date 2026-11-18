@@ -59,18 +59,23 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         getWindow().setStatusBarColor(Color.TRANSPARENT);getWindow().setNavigationBarColor(Ui.BG);
         ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(Ui.BG);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(20),dp(8),dp(20),dp(28));content.setClipToPadding(false);
-        scroll.addView(content);setContentView(scroll);
-        WindowCompat.getInsetsController(getWindow(),scroll).setAppearanceLightStatusBars(true);
-        WindowCompat.getInsetsController(getWindow(),scroll).setAppearanceLightNavigationBars(true);
-        ViewCompat.setOnApplyWindowInsetsListener(scroll,(v,insets)->{
+        scroll.addView(content);
+        // The shared bottom bar sits under the list (same bar as Home, Schedule and Insights).
+        LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(Ui.BG);
+        page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
+        page.addView(com.tempo.app.ui.BottomNav.create(this,com.tempo.app.ui.BottomNav.Tab.HISTORY,null));
+        setContentView(page);
+        WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightStatusBars(true);
+        WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightNavigationBars(true);
+        ViewCompat.setOnApplyWindowInsetsListener(page,(v,insets)->{
             Insets safe=insets.getInsets(WindowInsetsCompat.Type.systemBars()|WindowInsetsCompat.Type.displayCutout()|WindowInsetsCompat.Type.ime());
             v.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;
-        });ViewCompat.requestApplyInsets(scroll);
+        });ViewCompat.requestApplyInsets(page);
         load();
     }
     private void header() {
         content.removeAllViews();
-        content.addView(Ui.backRow(this, "Back", v -> { if (!saving) finish(); }));
+        content.addView(Ui.backRow(this, "Home", v -> { if (!saving) finish(); }));
         Ui.space(content, 6);
         content.addView(Ui.title(this, "History"));
         Ui.space(content, 4);

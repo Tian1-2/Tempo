@@ -180,7 +180,20 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 19, INK, true);
         month.setGravity(Gravity.CENTER);
         header.addView(month, new FrameLayout.LayoutParams(-2, -1, Gravity.CENTER));
+        if (selectedDayMillis != startOfDay(System.currentTimeMillis())) {
+            // Jump back to today (was the "Today" button of the old bottom bar).
+            TextView today = label("Today", 13, Ui.GREEN, true);
+            today.setGravity(Gravity.CENTER);
+            today.setPadding(dp(12), 0, dp(12), 0);
+            today.setBackground(shape(Ui.MINT_SOFT, 12));
+            today.setContentDescription("Go to today");
+            today.setOnClickListener(v -> goToToday());
+            FrameLayout.LayoutParams todayParams = new FrameLayout.LayoutParams(-2, dp(36), Gravity.END | Gravity.CENTER_VERTICAL);
+            todayParams.rightMargin = dp(16);
+            header.addView(today, todayParams);
+        }
         content.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+        addTimerBanner();
         spacer(14);
         addWeekStrip();
         spacer(13);
@@ -419,7 +432,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             String description = task.getTitle() + "\n" + clock(block.startMillis) + "–" + clock(block.endMillis)
                     + "  ·  " + duration;
             TextView event = label(description, 13, INK, true);
-            event.setGravity(Gravity.CENTER_VERTICAL);
+            event.setGravity(Gravity.TOP | Gravity.START);
             event.setPadding(dp(12), dp(8), dp(8), dp(8));
             event.setMinHeight(dp(48));
             event.setContentDescription(description + ("COMPLETED".equals(task.getStatus()) ? ", completed" : ", not completed"));
@@ -472,7 +485,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             String description = byId.get(past.getTaskId()).getTitle() + "\nPast plan · "
                     + clock(past.getStartTime()) + "–" + clock(past.getEndTime());
             TextView card = label(description, 13, MUTED, true);
-            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setGravity(Gravity.TOP | Gravity.START);
             card.setPadding(dp(12), dp(8), dp(8), dp(8));
             card.setBackground(shape(Color.rgb(238, 241, 238), 12));
             entries.add(new TimelineEntry(card, start, end));
@@ -488,7 +501,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             TextView card = label("", 13, Ui.INK, false);
             card.setText(caption);
             card.setContentDescription("Fixed weekly commitment, " + commitment.title() + ", " + commitment.weeklyTime());
-            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setGravity(Gravity.TOP | Gravity.START);
             card.setPadding(dp(12), dp(8), dp(8), dp(8));
             card.setMinHeight(dp(48));
             card.setBackground(Ui.fixedBackground(this));
@@ -574,45 +587,41 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     }
 
     private void addBottomBar() {
-        LinearLayout bar = new LinearLayout(this);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(0, dp(4), 0, dp(8));
-        TextView today = bottomAction("Today");
-        today.setOnClickListener(v -> {
-            selectedDayMillis = startOfDay(System.currentTimeMillis());
-            pendingJumpDay = selectedDayMillis;
-            jumpToTime = true; schedule.clear(); render(); loadData();
-        });
-        bar.addView(today, new LinearLayout.LayoutParams(0, dp(48), 1));
-        TextView timer = bottomAction("Timer");
-        timer.setOnClickListener(v -> {
-            SharedPreferences prefs = getSharedPreferences("tempo_focus_timer", MODE_PRIVATE);
-            int active = prefs.getInt("taskId", Integer.MIN_VALUE);
-            if (active == Integer.MIN_VALUE) {
-                new AlertDialog.Builder(this).setMessage("No timer is running. Open a task on the timeline and tap Start focus.")
-                        .setPositiveButton("OK", null).show();
-                return;
-            }
-            Task found = null;
-            for (Task task : tasks) if (!task.isArchived() && task.getTaskId() == active) found = task;
-            Intent intent = new Intent(this, FocusTimerActivity.class);
-            intent.putExtra("taskId", active);
-            intent.putExtra("title", found == null ? "Current task" : found.getTitle());
-            if (found != null) intent.putExtra("targetMinutes", focusMinutes(found));
-            startActivity(intent);
-        });
-        bar.addView(timer, new LinearLayout.LayoutParams(0, dp(48), 1));
-        TextView add = bottomAction("＋ Add");
-        add.setOnClickListener(v -> addTaskForSelectedDay());
-        bar.addView(add, new LinearLayout.LayoutParams(0, dp(48), 1));
-        content.addView(bar);
+        content.addView(com.tempo.app.ui.BottomNav.create(this, com.tempo.app.ui.BottomNav.Tab.SCHEDULE,
+                this::addTaskForSelectedDay));
     }
 
-    private TextView bottomAction(String title) {
-        TextView action = label(title, 15, INK, true);
-        action.setGravity(Gravity.CENTER);
-        return action;
+    private void goToToday() {
+        selectedDayMillis = startOfDay(System.currentTimeMillis());
+        pendingJumpDay = selectedDayMillis;
+        jumpToTime = true; schedule.clear(); render(); loadData();
     }
+
+    /** While a focus timer is running, a banner leads back to it (was the "Timer" button). */
+    private void addTimerBanner() {
+        SharedPreferences prefs = getSharedPreferences("tempo_focus_timer", MODE_PRIVATE);
+        int active = prefs.getInt("taskId", Integer.MIN_VALUE);
+        if (active == Integer.MIN_VALUE) return;
+        Task found = null;
+        for (Task task : tasks) if (!task.isArchived() && task.getTaskId() == active) found = task;
+        final Task running = found;
+        TextView banner = label("⏱  Timer running" + (running == null ? "" : " · " + running.getTitle()) + "   Open ›",
+                13, Color.WHITE, true);
+        banner.setGravity(Gravity.CENTER_VERTICAL);
+        banner.setPadding(dp(16), 0, dp(16), 0);
+        banner.setBackground(shape(INK, 14));
+        banner.setOnClickListener(v -> {
+            Intent intent = new Intent(this, FocusTimerActivity.class);
+            intent.putExtra("taskId", active);
+            intent.putExtra("title", running == null ? "Current task" : running.getTitle());
+            if (running != null) intent.putExtra("targetMinutes", focusMinutes(running));
+            startActivity(intent);
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, dp(44));
+        params.leftMargin = dp(22); params.rightMargin = dp(22); params.topMargin = dp(6);
+        content.addView(banner, params);
+    }
+
 
     private void addTaskForSelectedDay() {
         Intent intent = new Intent(this, AddTaskActivity.class);
