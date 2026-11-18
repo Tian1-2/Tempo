@@ -222,6 +222,25 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         fixedCard.addView(editFixed);
         body.addView(fixedCard);
 
+        section("CATEGORIES");
+        LinearLayout categoryCard = card();
+        categoryCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        categoryCard.addView(text("Task labels and colours", 15, INK, true));
+        space(categoryCard, 2);
+        categoryCard.addView(text("Study, Work and Life to start with. Add your own, such as Club or Part-time job.",
+                13, MUTED, false));
+        space(categoryCard, 10);
+        TextView editCategories = Ui.secondary(this, "Edit categories");
+        editCategories.setOnClickListener(v -> startActivity(new Intent(this, CategoriesActivity.class)));
+        categoryCard.addView(editCategories);
+        body.addView(categoryCard);
+
+        section("REMINDERS");
+        reminderCard = card();
+        reminderCard.setPadding(dp(16), dp(10), dp(16), dp(14));
+        body.addView(reminderCard);
+        renderReminders();
+
         // Demo seeding is available only through a hidden debug gesture.
         if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             heading.setOnLongClickListener(v -> { confirmSampleData(); return true; });
@@ -530,6 +549,65 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         }
 
         private static float x(int minutes, float width) { return width * minutes / 1440f; }
+    }
+
+    private LinearLayout reminderCard;
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (reminderCard != null) renderReminders(); // permission may have changed in Settings
+    }
+
+    /** Reminder switch and lead time; these apply at once and do not need Save. */
+    private void renderReminders() {
+        reminderCard.removeAllViews();
+        android.widget.Switch toggle = new android.widget.Switch(this);
+        toggle.setText("Remind me before each task");
+        toggle.setTextSize(15);
+        toggle.setTextColor(INK);
+        toggle.setMinHeight(dp(48));
+        toggle.setChecked(com.tempo.app.reminders.Reminders.enabled(this));
+        toggle.setOnCheckedChangeListener((b, on) -> {
+            com.tempo.app.reminders.Reminders.setEnabled(this, on);
+            if (on && android.os.Build.VERSION.SDK_INT >= 33 && !com.tempo.app.reminders.Reminders.canNotify(this)) {
+                requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 42);
+            }
+            renderReminders();
+        });
+        reminderCard.addView(toggle);
+        if (!com.tempo.app.reminders.Reminders.enabled(this)) return;
+        reminderCard.addView(text("A notification shortly before a planned task; tap it to start the focus timer. How early:",
+                13, MUTED, false));
+        space(reminderCard, 10);
+        LinearLayout chips = new LinearLayout(this);
+        int current = com.tempo.app.reminders.Reminders.leadMinutes(this);
+        for (int minutes : com.tempo.app.reminders.Reminders.LEAD_CHOICES) {
+            boolean selected = minutes == current;
+            TextView chip = text(minutes == 0 ? "At start" : minutes + " min", 13, INK, selected);
+            chip.setSingleLine(true);
+            chip.setGravity(Gravity.CENTER);
+            GradientDrawable bg = new GradientDrawable();
+            bg.setColor(selected ? MINT : MINT_SOFT);
+            bg.setCornerRadius(dp(12));
+            chip.setBackground(bg);
+            chip.setOnClickListener(v -> { com.tempo.app.reminders.Reminders.setLeadMinutes(this, minutes); renderReminders(); });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(40), 1);
+            lp.rightMargin = dp(6);
+            chips.addView(chip, lp);
+        }
+        reminderCard.addView(chips);
+        if (!com.tempo.app.reminders.Reminders.canNotify(this)) {
+            space(reminderCard, 10);
+            TextView fix = Ui.link(this, "Notifications are off for Tempo · Open settings");
+            fix.setOnClickListener(v -> startActivity(new Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, getPackageName())));
+            reminderCard.addView(fix);
+        }
+    }
+
+    @Override public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        super.onRequestPermissionsResult(code, permissions, results);
+        if (reminderCard != null) renderReminders();
     }
 
     private void section(String title) {

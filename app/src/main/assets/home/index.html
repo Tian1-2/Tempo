@@ -238,9 +238,9 @@
       h += '<div class="tl">';
       d.rows.forEach(function (r, i) {
         h += '<div class="item fade' + (r.current ? ' now' : '') + '" style="animation-delay:' + (0.2 + i * 0.05) + 's">' +
-          '<div class="time">' + esc(r.startText) + '</div><div class="rail"><span class="dot" style="background:' + color(r.category) + '"></span></div>' +
+          '<div class="time">' + esc(r.startText) + '</div><div class="rail"><span class="dot" style="background:' + (r.color || color(r.category)) + '"></span></div>' +
           '<div class="task' + (r.done ? ' done' : '') + '"' + (r.done ? '' : ' data-act="focus" data-id="' + r.taskId + '"') + '><div class="t"><div class="name">' + esc(r.title) + '</div>' +
-          '<div class="sub"><span>' + esc(r.minutes) + '</span><span>·</span><span style="color:' + color(r.category) + ';font-weight:700">' + esc(r.category) + '</span></div></div>' +
+          '<div class="sub"><span>' + esc(r.minutes) + '</span><span>·</span><span style="color:' + (r.color || color(r.category)) + ';font-weight:700">' + esc(r.category) + '</span></div></div>' +
           (r.done ? '<span class="check">' + ICON.check + '</span>' : '') + '</div></div>';
       });
       h += '</div>';

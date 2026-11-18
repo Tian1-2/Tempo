@@ -50,3 +50,12 @@
 - **遗留代码清理**：日程页在数据库为空时不再显示 3 条假示例任务，改为提示添加第一个任务；删除最早的数据库测试 `MainActivity` 和 `activity_main.xml`。
 - **文档**：新增根目录英文 `README.md`（功能、编译运行、测试、项目结构）；`gradlew` 加上可执行权限。
 - **验证**：`:app:assembleDebug`、`:app:testDebugUnitTest`（新增 `TaskAPolishUnitTest` 7 项）、`python3 checks/run_checks.py`（新增 `FixedScheduleCheck` 10 项，真实 SQLite）全部通过；模拟器核对见提交说明。
+
+## 8. task-a 第二轮：补齐功能（2026-11-18）
+
+- **自定义类别和颜色**（新增 `Category`、`CategoryDao`、`Categories`、`CategoryDialogs`、`CategoriesActivity`）：数据库升级到 V5，新增 `categories` 表；默认 Study/Work/Life，升级时自动收录旧任务已用过的类别。新建任务的类别改为可横向滚动的色块，末尾 **+ New** 可直接新建类别并选色（8 种颜色）。档案页新增 **Edit categories**：改颜色、删除未被使用的类别（仍有任务使用时会提示先移走）。颜色统一用于主页、日程时间块（浅色底 + 左侧色条）和 History。
+- **任务提醒通知**（新增 `reminders/`）：在下一个计划任务开始前推送通知（档案页可选"开始时 / 提前 5、10、15 分钟"，可关闭），点通知直接进入该任务的计时页；若还有未结束的计时则打开日程。每次重排、每次提醒后、App 启动、重启手机或更新 App 后都会重新设定下一条提醒。同一任务休息后的下一段不再重复提醒。首次打开 App 时请求通知权限（Android 13+）；使用 `USE_EXACT_ALARM` 保证准时（若上架 Play 商店需另行声明）。
+- **排程不再出现零碎时段**：同一任务最后不足 10 分钟的尾巴并入前一段（如 31 分钟 = 1 段，而不是 25 + 6）；被空档截断时，留给后面的部分至少 10 分钟；因预测时长微调而多出的几分钟不再单独占一个时段。D 的 `DurationLearningCheck` 中"31 分钟分两段"的断言相应改为"一段"。
+- **示例数据**：增加一个自定义类别 "Club" 的任务，演示颜色功能。
+- **文档**：README 补充类别、提醒、权限；新增 `docs/REPORT-DRAFT.md`（书面报告草稿）。
+- **验证**：`assembleDebug`、30 项单元测试、`checks/run_checks.py`（新增 `CategoryCheck`）通过；模拟器（Android 16）上核对了 V4→V5 升级、类别新建/上色/删除保护、提醒准时弹出并跳转计时页、开机/更新后重新设定提醒。

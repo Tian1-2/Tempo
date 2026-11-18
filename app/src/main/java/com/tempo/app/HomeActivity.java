@@ -113,6 +113,17 @@ public class HomeActivity extends AppCompatActivity {
             return WindowInsetsCompat.CONSUMED;
         });
         web.loadUrl(PAGE);
+        com.tempo.app.reminders.Reminders.refresh(this);
+        askForNotificationsOnce();
+    }
+
+    /** Reminders need the notification permission on Android 13+; ask once, on first launch. */
+    private void askForNotificationsOnce() {
+        if (android.os.Build.VERSION.SDK_INT < 33 || com.tempo.app.reminders.Reminders.canNotify(this)) return;
+        android.content.SharedPreferences prefs = com.tempo.app.reminders.Reminders.prefs(this);
+        if (prefs.getBoolean("askedPermission", false)) return;
+        prefs.edit().putBoolean("askedPermission", true).apply();
+        requestPermissions(new String[]{android.Manifest.permission.POST_NOTIFICATIONS}, 41);
     }
 
     @Override protected void onResume() {
@@ -232,6 +243,7 @@ public class HomeActivity extends AppCompatActivity {
             n.put("taskId", next.task.getTaskId());
             n.put("title", next.task.getTitle());
             n.put("category", category(next.task.getCategory()));
+            n.put("color", com.tempo.app.model.Category.hex(com.tempo.app.ui.Categories.color(next.task.getCategory())));
             n.put("timeText", time(next.nextStart) + " – " + time(next.nextEnd));
             n.put("now", next.nextStart <= now);
             long minutes = (next.nextStart - now + MINUTE - 1) / MINUTE;
@@ -245,6 +257,7 @@ public class HomeActivity extends AppCompatActivity {
             r.put("taskId", row.task.getTaskId());
             r.put("title", row.task.getTitle());
             r.put("category", category(row.task.getCategory()));
+            r.put("color", com.tempo.app.model.Category.hex(com.tempo.app.ui.Categories.color(row.task.getCategory())));
             r.put("startText", time(row.start));
             r.put("minutes", DailyReview.formatMinutes(row.minutes));
             r.put("done", isDone(row.task));
@@ -277,7 +290,7 @@ public class HomeActivity extends AppCompatActivity {
     private static boolean isDone(Task task) { return "COMPLETED".equals(task.getStatus()); }
 
     private static String category(String value) {
-        return "Work".equals(value) ? "Work" : "Life".equals(value) ? "Life" : "Study";
+        return com.tempo.app.ui.Categories.name(value);
     }
 
     private static List<Row> buildRows(List<ScheduleItem> slots, List<Task> tasks, long now) {

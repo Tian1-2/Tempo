@@ -48,6 +48,9 @@ public final class ScheduleModelAdapter {
             int locked = lockedHere.getOrDefault(task.id, 0);
             int minutes = Math.max(task.durationMinutes - elsewhere, locked);
             if (minutes <= 0) continue;
+            // A few minutes left over for a task that is already planned on other days come from
+            // estimate rounding; a separate 1–9 minute slot would only clutter the schedule.
+            if (elsewhere > 0 && locked == 0 && minutes < ScheduleGenerator.MIN_SESSION_MINUTES) continue;
             result.add(minutes == task.durationMinutes ? task : new ScheduleGenerator.Task(task.id, minutes,
                     task.deadlineMillis, task.importance, task.difficulty));
         }

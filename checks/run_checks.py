@@ -8,10 +8,10 @@ java=shutil.which('java')
 if not java:raise SystemExit('A JDK with java and jdk.compiler is required.')
 with tempfile.TemporaryDirectory(prefix='tempo-check-') as out:
     production=list((BASE/'model').glob('*.java'))
-    production += [BASE/p for p in ['insights/InsightsStats.java','insights/TimeOfDayStats.java','planning/GenerationPreflight.java','learning/DurationLearning.java','learning/LearningSummary.java','learning/TaskTypes.java','learning/SessionTiming.java','learning/LearningStore.java','scheduler/ScheduleGenerator.java','scheduler/ScheduleModelAdapter.java','ui/TimelineScale.java','database/AppDatabaseHelper.java','database/FixedEventDao.java','database/TaskDao.java','database/TaskFeedbackDao.java','database/ScheduleDao.java','database/UserProfileDao.java']]
+    production += [BASE/p for p in ['insights/InsightsStats.java','insights/TimeOfDayStats.java','planning/GenerationPreflight.java','learning/DurationLearning.java','learning/LearningSummary.java','learning/TaskTypes.java','learning/SessionTiming.java','learning/LearningStore.java','scheduler/ScheduleGenerator.java','scheduler/ScheduleModelAdapter.java','ui/TimelineScale.java','database/AppDatabaseHelper.java','database/FixedEventDao.java','database/CategoryDao.java','database/TaskDao.java','database/TaskFeedbackDao.java','database/ScheduleDao.java','database/UserProfileDao.java']]
     production += [BASE/'planning/ScheduleEditRules.java']
     files=production+list((ROOT/'checks/jvm').rglob('*.java'))+list((ROOT/'checks').glob('*Check.java'))
     run([java,'-m','jdk.compiler/com.sun.tools.javac.Main','-source','11','-target','11','-Xlint:-options','-d',out,*files])
-    for name in ['InsightsStatsCheck','GenerationEntryCheck','DurationLearningCheck','TimelineScaleCheck','SessionTimingCheck','WorkflowCheck','EvaluationEligibilityCheck','ScheduleEditRulesCheck','FixedScheduleCheck']:
+    for name in ['InsightsStatsCheck','GenerationEntryCheck','DurationLearningCheck','TimelineScaleCheck','SessionTimingCheck','WorkflowCheck','EvaluationEligibilityCheck','ScheduleEditRulesCheck','FixedScheduleCheck','CategoryCheck']:
         run([java,'-Dpython='+sys.executable,'-Dsqlite.bridge='+str(ROOT/'checks/jvm/sqlite_bridge.py'),'-cp',out,name])
 run([sys.executable,'checks/check_learning_sql.py'])

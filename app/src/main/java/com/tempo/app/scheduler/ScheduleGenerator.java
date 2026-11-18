@@ -172,9 +172,20 @@ public final class ScheduleGenerator {
                 free.removeIf(w -> minutes(w) < shortest);
                 Interval chosen = chooseWindow(free, request.productiveWindows, task.difficulty);
                 if (chosen == null) break;
-                int length = Math.min(Math.min(remaining, request.focusMinutes),
+                int minPieceHere = Math.min(MIN_SESSION_MINUTES, request.focusMinutes);
+                // A focus block may stretch a little to swallow a short tail (26 min = one block, not 25 + 1).
+                int focusCap = remaining - request.focusMinutes < minPieceHere ? remaining : request.focusMinutes;
+                int length = Math.min(Math.min(remaining, focusCap),
                         Math.min(request.maxTaskMinutes - used, minutes(chosen)));
                 if (length <= 0) break;
+                // When a short gap cuts the task, do not leave a crumb (e.g. 3 minutes) for later:
+                // place less here so the leftover is still a useful piece.
+                int minPiece = Math.min(MIN_SESSION_MINUTES, request.focusMinutes);
+                int leftover = remaining - length;
+                if (length == minutes(chosen) && leftover > 0 && leftover < minPiece
+                        && remaining - minPiece >= minPiece) {
+                    length = remaining - minPiece;
+                }
                 Interval interval = new Interval(chosen.start, chosen.start + length * MINUTE);
                 sessions.add(new Session(task.id, interval, false));
                 remaining -= length;

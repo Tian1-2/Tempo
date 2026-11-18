@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class AppDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "tempo.db";
-    private static final int DATABASE_VERSION = 4;
+    private static final int DATABASE_VERSION = 5;
 
     public AppDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -86,11 +86,13 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
         );
         com.tempo.app.learning.LearningStore.createTables(db);
         FixedEventDao.createTable(db);
+        CategoryDao.createTable(db);
     }
 
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 3) com.tempo.app.learning.LearningStore.upgradeTables(db);
         if (oldVersion < 4) FixedEventDao.createTable(db); // weekly classes and meetings
+        if (oldVersion < 5) CategoryDao.createTable(db);   // custom categories and colours
     }
 }

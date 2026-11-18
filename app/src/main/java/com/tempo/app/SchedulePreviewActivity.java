@@ -365,9 +365,21 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             event.setPadding(dp(12), dp(8), dp(8), dp(8));
             event.setMinHeight(dp(48));
             event.setContentDescription(description + ("COMPLETED".equals(task.getStatus()) ? ", completed" : ", not completed"));
-            event.setBackground(shape("COMPLETED".equals(task.getStatus()) ? Color.rgb(229, 233, 230)
-                    : "Work".equals(task.getCategory()) ? Color.rgb(219, 231, 245)
-                    : "Life".equals(task.getCategory()) ? Color.rgb(249, 233, 211) : MINT, 12));
+            if ("COMPLETED".equals(task.getStatus())) {
+                event.setBackground(shape(Color.rgb(229, 233, 230), 12));
+            } else {
+                // Category colour: a tinted card with a solid stripe on the left edge.
+                GradientDrawable fill = new GradientDrawable();
+                fill.setColor(com.tempo.app.ui.Categories.soft(task.getCategory()));
+                fill.setCornerRadius(dp(12));
+                GradientDrawable stripe = new GradientDrawable();
+                stripe.setColor(com.tempo.app.ui.Categories.color(task.getCategory()));
+                stripe.setCornerRadius(dp(12));
+                android.graphics.drawable.LayerDrawable layered =
+                        new android.graphics.drawable.LayerDrawable(new android.graphics.drawable.Drawable[]{stripe, fill});
+                layered.setLayerInset(1, dp(5), 0, 0, 0);
+                event.setBackground(layered);
+            }
             event.setOnClickListener(v -> openScheduleDetail(task, block));
             entries.add(new TimelineEntry(event, start, end));
         }
@@ -635,7 +647,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     }
 
     private String categoryName(String category) {
-        return "Work".equals(category) ? "Work" : "Life".equals(category) ? "Life" : "Study";
+        return com.tempo.app.ui.Categories.name(category);
     }
 
     private TextView detailAction(String text, int color) {
@@ -662,7 +674,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         form.setPadding(dp(22), dp(12), dp(22), dp(8));
         EditText title = input(form, "Task name", source.getTitle(), false);
         EditText description = input(form, "Description", source.getDescription(), false);
-        EditText category = input(form, "Category: Study / Work / Life", source.getCategory(), false);
+        EditText category = input(form, "Category", source.getCategory(), false);
         EditText type = input(form, "Task type", source.getTaskType(), false);
         EditText estimate = input(form, "Estimated minutes", String.valueOf(source.getEstimatedDuration()), true);
         EditText difficulty = input(form, "Difficulty 1–5", String.valueOf(source.getDifficulty()), true);
@@ -684,8 +696,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 String newCategory = category.getText().toString().trim();
                 if (newTitle.isEmpty() || minutes <= 0 || difficultyValue < 1 || difficultyValue > 5
                         || importanceValue < 1 || importanceValue > 5
-                        || !("Study".equals(newCategory) || "Work".equals(newCategory) || "Life".equals(newCategory))) {
-                    throw new IllegalArgumentException("Enter a name, a positive duration, difficulty and importance from 1 to 5, and a Study / Work / Life category.");
+                        || com.tempo.app.ui.Categories.find(newCategory) == null) {
+                    throw new IllegalArgumentException("Enter a name, a positive duration, difficulty and importance from 1 to 5, and an existing category.");
                 }
                 long due = 0;
                 String dueText = deadline.getText().toString().trim();

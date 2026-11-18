@@ -56,7 +56,7 @@ public class AddTaskActivity extends AppCompatActivity {
     private Spinner taskType;
     private Bundle draftState;
     private LinearLayout categoryRow, difficultyRow, importanceRow;
-    private String category = "Study";
+    private String category = com.tempo.app.ui.Categories.first();
     private int difficulty = 3, importance = 3;
     private String scheduleNote;
 
@@ -122,7 +122,11 @@ public class AddTaskActivity extends AppCompatActivity {
         section(body, "CATEGORY");
         categoryRow = new LinearLayout(this);
         categoryRow.setOrientation(LinearLayout.HORIZONTAL);
-        body.addView(categoryRow);
+        android.widget.HorizontalScrollView categoryScroll = new android.widget.HorizontalScrollView(this);
+        categoryScroll.setHorizontalScrollBarEnabled(false);
+        categoryScroll.setClipToPadding(false);
+        categoryScroll.addView(categoryRow);
+        body.addView(categoryScroll);
         renderCategories();
         space(body,12);
         body.addView(text("Task type · optional",13,MUTED,true));
@@ -188,18 +192,43 @@ public class AddTaskActivity extends AppCompatActivity {
 
     private void renderCategories() {
         categoryRow.removeAllViews();
-        String[] keys = {"Study", "Work", "Life"};
-        String[] names = {"Study", "Work", "Life"};
-        for (int i = 0; i < keys.length; i++) {
-            final String key = keys[i];
-            TextView choice = text(names[i], 14, INK, category.equals(key));
-            choice.setGravity(Gravity.CENTER);
-            choice.setBackground(shape(category.equals(key) ? MINT : Color.WHITE, 14));
-            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, dp(46), 1);
-            if (i > 0) params.leftMargin = dp(9);
-            categoryRow.addView(choice, params);
-            choice.setOnClickListener(v -> {if(!category.equals(key)){category=key;renderTypes(null);} renderCategories(); });
+        java.util.List<String> names = new java.util.ArrayList<>();
+        for (com.tempo.app.model.Category c : com.tempo.app.ui.Categories.all()) names.add(c.getName());
+        // A task may use a category that no longer exists in the list (e.g. old data): keep it selectable.
+        if (com.tempo.app.ui.Categories.find(category) == null && category != null && !category.trim().isEmpty()) names.add(category);
+        for (String key : names) {
+            boolean selected = key.equalsIgnoreCase(category);
+            int color = com.tempo.app.ui.Categories.color(key);
+            LinearLayout chip = new LinearLayout(this);
+            chip.setGravity(Gravity.CENTER_VERTICAL);
+            chip.setPadding(dp(14), 0, dp(16), 0);
+            GradientDrawable bg = shape(selected ? com.tempo.app.model.Category.soft(color) : Color.WHITE, 14);
+            if (selected) bg.setStroke(dp(2), color);
+            chip.setBackground(bg);
+            View dot = new View(this);
+            GradientDrawable dotShape = new GradientDrawable();
+            dotShape.setShape(GradientDrawable.OVAL);
+            dotShape.setColor(color);
+            dot.setBackground(dotShape);
+            chip.addView(dot, new LinearLayout.LayoutParams(dp(10), dp(10)));
+            TextView label = text(com.tempo.app.ui.Categories.name(key), 14, INK, selected);
+            label.setPadding(dp(8), 0, 0, 0);
+            chip.addView(label);
+            chip.setContentDescription(key + (selected ? ", selected" : ""));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-2, dp(46));
+            params.rightMargin = dp(9);
+            categoryRow.addView(chip, params);
+            chip.setOnClickListener(v -> { if (!key.equals(category)) { category = key; renderTypes(null); } renderCategories(); });
         }
+        TextView add = text("+ New", 14, com.tempo.app.ui.Ui.GREEN, true);
+        add.setGravity(Gravity.CENTER);
+        add.setPadding(dp(16), 0, dp(16), 0);
+        add.setBackground(shape(Color.WHITE, 14));
+        add.setContentDescription("New category");
+        add.setOnClickListener(v -> com.tempo.app.ui.CategoryDialogs.create(this, name -> {
+            category = name; renderTypes(null); renderCategories();
+        }));
+        categoryRow.addView(add, new LinearLayout.LayoutParams(-2, dp(46)));
     }
 
     private void renderTypes(String existing) {

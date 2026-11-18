@@ -16,6 +16,7 @@ public class RepositoryProvider {
     public static void init(Context context) {
         if (helper == null) {
             helper = new AppDatabaseHelper(context.getApplicationContext());
+            com.tempo.app.ui.Categories.reload(helper);
         }
     }
 
@@ -31,6 +32,8 @@ public class RepositoryProvider {
     public static ScheduleRepository getScheduleRepository() {
         return new ScheduleRepository(new ScheduleDao(helper));
     }
+
+    public static com.tempo.app.database.CategoryDao getCategoryDao() { return new com.tempo.app.database.CategoryDao(helper); }
 
     /** Weekly classes and meetings; DAO calls must run off the UI thread. */
     public static FixedEventDao getFixedEventDao() { return new FixedEventDao(helper); }

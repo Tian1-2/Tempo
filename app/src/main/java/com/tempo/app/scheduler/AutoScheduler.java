@@ -70,6 +70,7 @@ public final class AutoScheduler {
             return;
         }
         String date = today();
+        final Context appContext = context.getApplicationContext();
         EXECUTOR.execute(() -> {
             try {
                 UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
@@ -102,6 +103,7 @@ public final class AutoScheduler {
                     result = new ScheduleService().generateRange(ScheduleService.HORIZON_DAYS,
                             new DefaultScheduleConstraints(), false);
                 }
+                com.tempo.app.reminders.Reminders.refresh(appContext);
                 post(listener, result, null);
             } catch (Exception e) {
                 Log.w(TAG, "Schedule generation failed for " + date, e);

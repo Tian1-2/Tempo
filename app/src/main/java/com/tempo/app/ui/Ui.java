@@ -182,21 +182,9 @@ public final class Ui {
         return row;
     }
 
-    public static int categoryColor(String category) {
-        if ("Work".equalsIgnoreCase(category)) return WORK;
-        if ("Life".equalsIgnoreCase(category)) return LIFE;
-        return STUDY;
-    }
+    public static int categoryColor(String category) { return Categories.color(category); }
 
-    public static int categorySoft(String category) {
-        if ("Work".equalsIgnoreCase(category)) return Color.rgb(228, 235, 248);
-        if ("Life".equalsIgnoreCase(category)) return Color.rgb(250, 238, 222);
-        return MINT_SOFT;
-    }
+    public static int categorySoft(String category) { return Categories.soft(category); }
 
-    public static String categoryName(String category) {
-        if ("Work".equalsIgnoreCase(category)) return "Work";
-        if ("Life".equalsIgnoreCase(category)) return "Life";
-        return "Study";
-    }
+    public static String categoryName(String category) { return Categories.name(category); }
 }

@@ -167,6 +167,62 @@ public class TaskAPolishUnitTest {
         }
     }
 
+    @Test public void shortGapDoesNotLeaveACrumbForLater() {
+        long mon = monday();
+        Task t = new Task("Write-up", "Work", 25, 3, 3, 0);
+        t.setTaskId(4);
+        long now = mon + 17 * 60 * M + 35 * M;
+        // 22 free minutes before a fixed block at 17:57, then nothing until tomorrow.
+        ScheduleGenerator.Result r = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
+                new Interval(mon, mon + DAY), now,
+                ScheduleModelAdapter.pendingTasks(Collections.singletonList(t)),
+                Collections.singletonList(new Interval(mon + 7 * 60 * M, mon + 23 * 60 * M)),
+                Collections.singletonList(new Interval(mon + 17 * 60 * M + 57 * M, mon + 23 * 60 * M)),
+                Collections.<ScheduleGenerator.Session>emptyList(),
+                Collections.<Interval>emptyList(), 25, 5, 240));
+        assertEquals(1, r.sessions.size());
+        assertEquals("placed 15 so 10 are left, not 22 + 3", 15, (r.sessions.get(0).interval.end - r.sessions.get(0).interval.start) / M);
+        assertEquals(10, r.unscheduledTasks.get(0).remainingMinutes);
+    }
+
+    @Test public void shortTailIsAbsorbedAndRoundingCrumbIsDropped() {
+        long mon = monday();
+        Task t = new Task("Report", "Work", 27, 3, 3, 0);
+        t.setTaskId(6);
+        ScheduleGenerator.Result r = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
+                new Interval(mon, mon + DAY), mon + 9 * 60 * M,
+                ScheduleModelAdapter.pendingTasks(Collections.singletonList(t)),
+                Collections.singletonList(new Interval(mon + 9 * 60 * M, mon + 18 * 60 * M)),
+                Collections.<Interval>emptyList(), Collections.<ScheduleGenerator.Session>emptyList(),
+                Collections.<Interval>emptyList(), 25, 5, 240));
+        assertEquals("27 minutes is one block, not 25 + 2", 1, r.sessions.size());
+
+        // 49 minutes needed, 47 already planned on another day: the 2-minute rest is not a new slot.
+        java.util.Map<Long, Integer> elsewhere = java.util.Collections.singletonMap(6L, 47);
+        List<ScheduleGenerator.Task> left = ScheduleModelAdapter.subtractPlanned(
+                Collections.singletonList(new ScheduleGenerator.Task(6, 49, null, 3, 3)),
+                elsewhere, java.util.Collections.<Long, Integer>emptyMap());
+        assertTrue(left.isEmpty());
+    }
+
+    // ---------- categories ----------
+
+    @Test public void categoryColours() {
+        assertEquals(com.tempo.app.model.Category.STUDY, com.tempo.app.model.Category.fallbackColor("study"));
+        assertEquals(com.tempo.app.model.Category.WORK, com.tempo.app.model.Category.fallbackColor("工作"));
+        assertEquals(com.tempo.app.model.Category.STUDY, com.tempo.app.model.Category.fallbackColor(null));
+        int club = com.tempo.app.model.Category.fallbackColor("Club");
+        assertEquals("stable for the same name", club, com.tempo.app.model.Category.fallbackColor("club"));
+        int soft = com.tempo.app.model.Category.soft(0xFF000000);
+        assertEquals("82% towards white", 0xFFD1D1D1, soft);
+        assertEquals("#3F8F6B", com.tempo.app.model.Category.hex(com.tempo.app.model.Category.STUDY));
+        assertNull(com.tempo.app.model.Category.validateName("Club"));
+        assertNotNull(com.tempo.app.model.Category.validateName("  "));
+        assertNotNull(com.tempo.app.model.Category.validateName("A name that is far too long"));
+        assertEquals("Club", com.tempo.app.ui.Categories.name("club"));
+        assertEquals("Study", com.tempo.app.ui.Categories.name("study"));
+    }
+
     // ---------- deleted tasks in the daily review ----------
 
     @Test public void deletedTaskIsNotCountedAsUnfinished() {

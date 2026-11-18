@@ -90,6 +90,10 @@ public final class SampleData {
         pending("COMP7506 demo slides", "Study", "Assignment", 90, 4, 5, at(0, 23, 0));
         pending("Insights write-up", "Work", "Report", 45, 3, 3, 0);
         pending("Evening walk", "Life", "Exercise", 30, 1, 2, 0);
+        // A user-made category with its own colour.
+        new com.tempo.app.database.CategoryDao(helper).insert("Club", com.tempo.app.model.Category.PALETTE[3]);
+        pending("Robotics club poster", "Club", null, 40, 2, 3, 0);
+        com.tempo.app.ui.Categories.reload(helper);
         // Today's plan itself is generated afterwards by the caller through AutoScheduler.
     }
 
