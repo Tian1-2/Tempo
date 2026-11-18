@@ -55,9 +55,7 @@ public final class InsightsStats {
         return taskCount == 0 ? 0 : (int) Math.round(100.0 * completedTasks / taskCount);
     }
 
-    /** Seven local calendar days including today; future/invalid/orphan rows are excluded. */
-    public static InsightsStats calculate(List<Task> tasks, List<TaskFeedback> feedback,
-                                         long now, TimeZone zone) {
+    public static Calendar weekStart(long now, TimeZone zone) {
         Calendar day = Calendar.getInstance(zone);
         day.setTimeInMillis(now);
         day.set(Calendar.HOUR_OF_DAY, 0);
@@ -65,6 +63,13 @@ public final class InsightsStats {
         day.set(Calendar.SECOND, 0);
         day.set(Calendar.MILLISECOND, 0);
         day.add(Calendar.DAY_OF_MONTH, -6);
+        return day;
+    }
+
+    /** Seven local calendar days including today; future/invalid/orphan rows are excluded. */
+    public static InsightsStats calculate(List<Task> tasks, List<TaskFeedback> feedback,
+                                         long now, TimeZone zone) {
+        Calendar day = weekStart(now, zone);
         long[] bounds = new long[8];
         for (int i = 0; i < bounds.length; i++) {
             bounds[i] = day.getTimeInMillis();
@@ -74,8 +79,12 @@ public final class InsightsStats {
         System.arraycopy(bounds, 0, starts, 0, starts.length);
         Map<Integer, Task> byId = new HashMap<>();
         for (Task task : tasks) if (task != null && task.getTaskId() > 0) byId.put(task.getTaskId(), task);
-        int completed = 0;
-        for (Task task : byId.values()) if ("COMPLETED".equals(task.getStatus())) completed++;
+        int completed = 0, countedTasks = 0;
+        for (Task task : byId.values()) {
+            boolean done = "COMPLETED".equals(task.getStatus());
+            if (done) completed++;
+            if (done || !task.isArchived()) countedTasks++;
+        }
         long[] minutes = new long[7];
         Map<String, Long> totals = new LinkedHashMap<>();
         Set<Integer> recordedTasks = new HashSet<>();
@@ -110,7 +119,7 @@ public final class InsightsStats {
                 .thenComparing(c -> c.name));
         int active = 0;
         for (long value : minutes) if (value > 0) active++;
-        return new InsightsStats(starts, minutes, byId.size(), completed, total, sessions,
+        return new InsightsStats(starts, minutes, countedTasks, completed, total, sessions,
                 active, recordedTasks.size(), ratings, ratings == 0 ? 0 : (double) difficultySum / ratings,
                 categories);
     }

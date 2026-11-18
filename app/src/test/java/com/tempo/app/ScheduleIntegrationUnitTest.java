@@ -117,13 +117,13 @@ public class ScheduleIntegrationUnitTest {
         cancelled.setStartTime(10 * 60 * M);
         cancelled.setEndTime((10 * 60 + 30) * M);
         cancelled.setStatus("CANCELLED");
-        Map<Long, Integer> retained = ScheduleModelAdapter.retainedPastMinutes(
+        Map<Long, Integer> retained = ScheduleModelAdapter.ongoingMinutes(
                 Arrays.asList(past, cancelled), (9 * 60 + 1) * M);
-        assertEquals(Integer.valueOf(45), retained.get(1L));
+        assertEquals(Integer.valueOf(44), retained.get(1L));
         List<ScheduleGenerator.Task> remaining = ScheduleModelAdapter.subtractPlanned(
                 Collections.singletonList(new ScheduleGenerator.Task(1, 60, null, 3, 2)),
                 retained, new HashMap<Long, Integer>());
-        assertEquals(15, remaining.get(0).durationMinutes);
+        assertEquals(16, remaining.get(0).durationMinutes);
     }
 
     @Test public void missedAutomaticSlotIsAvailableForFreshPlanning() {
@@ -132,7 +132,7 @@ public class ScheduleIntegrationUnitTest {
         missed.setStartTime(9 * 60 * M);
         missed.setEndTime((9 * 60 + 45) * M);
         missed.setStatus("PLANNED");
-        assertTrue(ScheduleModelAdapter.retainedPastMinutes(
+        assertTrue(ScheduleModelAdapter.ongoingMinutes(
                 Collections.singletonList(missed), 10 * 60 * M).isEmpty());
     }
 

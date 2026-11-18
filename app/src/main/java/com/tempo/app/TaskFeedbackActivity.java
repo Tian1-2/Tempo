@@ -136,7 +136,7 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item); rating.setAdapter(adapter);
         optionalDetails.addView(rating,new LinearLayout.LayoutParams(-1,dp(52)));page.addView(optionalDetails);gap(page,12);
         detailsToggle.setOnClickListener(v->{expanded=!expanded;optionalDetails.setVisibility(expanded?View.VISIBLE:View.GONE);detailsToggle.setText(expanded?"Hide difficulty rating":"Add a difficulty rating · optional");});
-        page.addView(text("Save now, then regenerate your schedule when ready.",13,MUTED,false));
+        page.addView(text("Tempo will update your schedule after saving.",13,MUTED,false));
         gap(page,16); error = text("",14,BLUE,false); error.setVisibility(View.GONE); page.addView(error);
         save = button("Save session",PRIMARY); page.addView(save); gap(page,12);
         discard = button(manual?"Cancel":"End without saving",SECONDARY); page.addView(discard); gap(page,8);
@@ -165,6 +165,7 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         discard.setOnClickListener(v -> {
             if (saving) return;
             if (manual) { finish(); return; }
+            setBusy(true);
             clearTimer();
             AutoScheduler.replan(this, new AutoScheduler.Listener() {
                 @Override public void onScheduled(ScheduleGenerator.Result plan) { setResult(RESULT_OK); finish(); }
@@ -207,7 +208,6 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
     private void saved(LearningStore.Saved result) {
         clearTimer();
         Toast.makeText(this,result.complete?"Task completed · "+result.totalMinutes+" min recorded":"Activity saved · task still in progress",Toast.LENGTH_LONG).show();
-        if (manual) { setResult(RESULT_OK); finish(); return; }
         AutoScheduler.replan(this, new AutoScheduler.Listener() {
             @Override public void onScheduled(ScheduleGenerator.Result plan) {
                 setResult(RESULT_OK); finish();

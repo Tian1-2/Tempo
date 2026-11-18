@@ -43,7 +43,7 @@ public final class SampleData {
 
     /** True when there is nothing to overwrite: sample data is only added to an empty app. */
     public static boolean canSeed() {
-        return RepositoryProvider.getTaskRepository().getAllTasksSync().isEmpty();
+        return RepositoryProvider.getTaskRepository().getTasksWithHistorySync().isEmpty();
     }
 
     /** Background thread only. */

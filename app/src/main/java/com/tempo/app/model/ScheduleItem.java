@@ -1,6 +1,7 @@
 package com.tempo.app.model;
 
 public class ScheduleItem {
+    public static final String PAST_PLAN = "PAST_PLAN";
 
     private int scheduleId;          // primary key
     private int taskId;              // foreign key to tasks.task_id

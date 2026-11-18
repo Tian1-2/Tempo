@@ -81,10 +81,25 @@ public class TaskRepository {
         });
     }
 
-    public void getAllTasks(Callback<List<Task>> callback) {
+    public void restoreTask(int taskId, Callback<Integer> callback) {
         executor.execute(() -> {
             try {
-                List<Task> list = taskDao.getAllTasks();
+                int rows = taskDao.restoreTask(taskId);
+                mainHandler.post(() -> callback.onSuccess(rows));
+            } catch (Exception e) {
+                mainHandler.post(() -> callback.onError(e));
+            }
+        });
+    }
+
+    public void getAllTasks(Callback<List<Task>> callback) {
+        getAllTasks(false, callback);
+    }
+
+    public void getAllTasks(boolean includeHistory, Callback<List<Task>> callback) {
+        executor.execute(() -> {
+            try {
+                List<Task> list = includeHistory ? taskDao.getTasksWithHistory() : taskDao.getAllTasks();
                 mainHandler.post(() -> callback.onSuccess(list));
             } catch (Exception e) {
                 mainHandler.post(() -> callback.onError(e));
@@ -145,6 +160,17 @@ public class TaskRepository {
     }
 
     // Synchronous helpers for the home page (background thread only).
+    public List<Task> getTasksWithHistorySync() { return taskDao.getTasksWithHistory(); }
+
+    public void getManageableTasks(Callback<List<Task>> callback) {
+        executor.execute(() -> {
+            try {
+                List<Task> tasks = taskDao.getTasksForManagement(System.currentTimeMillis());
+                mainHandler.post(() -> callback.onSuccess(tasks));
+            } catch (Exception e) { mainHandler.post(() -> callback.onError(e)); }
+        });
+    }
+
     public List<Task> getAllTasksSync() {
         return taskDao.getAllTasks();
     }

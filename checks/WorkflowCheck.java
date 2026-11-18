@@ -72,7 +72,7 @@ public final class WorkflowCheck {
         long second=block(task,NOW+90*M,NOW+120*M,true);
         TaskDao dao=new TaskDao(helper);
         check(dao.archiveTask(task.getTaskId())==1,"whole task archived once");
-        check("DELETED".equals(dao.getTaskById(task.getTaskId()).getStatus()),"archived task row retained");
+        check(dao.getTaskById(task.getTaskId()).isArchived() && "IN_PROGRESS".equals(dao.getTaskById(task.getTaskId()).getStatus()),"archived task row retained");
         check(dao.getAllTasks().stream().noneMatch(t->t.getTaskId()==task.getTaskId()),"archived task hidden from normal task list");
         check("CANCELLED".equals(string("SELECT status FROM schedule_items WHERE schedule_id="+first)),"generated slot released");
         check("CANCELLED".equals(string("SELECT status FROM schedule_items WHERE schedule_id="+second)),"manual slot released");

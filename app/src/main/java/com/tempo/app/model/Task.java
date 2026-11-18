@@ -1,6 +1,14 @@
 package com.tempo.app.model;
 
 public class Task {
+    private boolean hasFutureSlot;
+    public boolean hasFutureSlot() { return hasFutureSlot; }
+    public void setHasFutureSlot(boolean value) { hasFutureSlot = value; }
+
+    private boolean archived;
+    public boolean isArchived() { return archived; }
+    public void setArchived(boolean value) { archived = value; }
+
 
     private int taskId;              // primary key, auto-increment
     private String title;            // task name

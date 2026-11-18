@@ -153,17 +153,22 @@ public final class ScheduleGenerator {
                     : Math.min(request.day.end, Math.floorDiv(task.deadlineMillis, MINUTE) * MINUTE);
             // Prefer one continuous task block, with its focus breaks inside it. A short
             // opening before a longer free window must not fragment the task unnecessarily.
-            if (remaining > 0 && remaining <= request.maxTaskMinutes - used) {
-                int breaks = (remaining - 1) / request.focusMinutes;
-                long blockMinutes = (long) remaining + (long) breaks * request.breakMinutes;
+            Interval wholeBlock = null;
+            int workToday = Math.min(remaining, request.maxTaskMinutes - used);
+            if (workToday > 0) {
+                int breaks = (workToday - 1) / request.focusMinutes;
+                long blockMinutes = (long) workToday + (long) breaks * request.breakMinutes;
                 List<Interval> free = freeWindows(request, sessions, task.id, cursor, deadline);
-                Interval wholeBlock = chooseWindowAtLeast(free, request.productiveWindows,
+                wholeBlock = chooseWindowAtLeast(free, request.productiveWindows,
                         task.difficulty, blockMinutes);
                 if (wholeBlock != null) cursor = wholeBlock.start;
             }
             while (remaining > 0 && used < request.maxTaskMinutes && cursor < deadline) {
                 List<Interval> free = freeWindows(request, sessions, task.id, cursor, deadline);
-                Interval chosen = chooseWindow(free, request.productiveWindows, task.difficulty);
+                Interval chosen = free.isEmpty() ? null : free.get(0);
+                if (wholeBlock != null && cursor < wholeBlock.end) {
+                    chosen = new Interval(cursor, wholeBlock.end);
+                }
                 if (chosen == null) break;
                 int length = Math.min(Math.min(remaining, request.focusMinutes),
                         Math.min(request.maxTaskMinutes - used, minutes(chosen)));
@@ -232,20 +237,6 @@ public final class ScheduleGenerator {
             if (cut.end < w.end) out.add(new Interval(cut.end, w.end));
         }
         return out;
-    }
-
-    private static Interval chooseWindow(List<Interval> free, List<Interval> productive, int difficulty) {
-        if (free.isEmpty()) return null;
-        // Difficult tasks try the first productive window; other tasks use the earliest free time.
-        if (difficulty >= 4) {
-            Interval best = null;
-            for (Interval f : free) for (Interval p : productive) {
-                long start = Math.max(f.start, p.start), end = Math.min(f.end, p.end);
-                if (start < end && (best == null || start < best.start)) best = new Interval(start, end);
-            }
-            if (best != null) return best;
-        }
-        return free.get(0);
     }
 
     private static Interval chooseWindowAtLeast(List<Interval> free, List<Interval> productive,

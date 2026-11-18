@@ -7,7 +7,7 @@ import android.database.sqlite.SQLiteOpenHelper;
 public class AppDatabaseHelper extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "tempo.db";
-    private static final int DATABASE_VERSION = 3;
+    private static final int DATABASE_VERSION = 4;
 
     public AppDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -31,6 +31,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                         "description TEXT, " +
                         "category TEXT NOT NULL, " +
                         "task_type TEXT, " +
+                        "archived INTEGER NOT NULL DEFAULT 0, " +
                         "estimated_duration INTEGER, " +
                         "predicted_duration INTEGER, " +
                         "difficulty INTEGER, " +
@@ -67,6 +68,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                         "focus_duration INTEGER, " +
                         "break_duration INTEGER, " +
                         "daily_capacity INTEGER, " +
+                        "fixed_blocks TEXT, " +
                         "preferred_start_time TEXT" +
                         ")"
         );
@@ -90,5 +92,14 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
     @Override
     public void onUpgrade(SQLiteDatabase db, int oldVersion, int newVersion) {
         if (oldVersion < 3) com.tempo.app.learning.LearningStore.upgradeTables(db);
+        if (oldVersion < 4 && newVersion >= 4) {
+            db.execSQL("ALTER TABLE tasks ADD COLUMN archived INTEGER NOT NULL DEFAULT 0");
+            db.execSQL("ALTER TABLE user_profile ADD COLUMN fixed_blocks TEXT");
+            // V3 optimization stored DELETED in the status column. Recover only documented outcomes.
+            db.execSQL("UPDATE tasks SET archived=1, status=CASE "
+                    + "WHEN EXISTS(SELECT 1 FROM task_feedback f WHERE f.task_id=tasks.task_id AND f.completion_status='COMPLETED') THEN 'COMPLETED' "
+                    + "WHEN EXISTS(SELECT 1 FROM task_feedback f WHERE f.task_id=tasks.task_id) THEN 'IN_PROGRESS' "
+                    + "ELSE 'PENDING' END WHERE status='DELETED'");
+        }
     }
 }

@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/insights_root"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
@@ -10,11 +11,56 @@
         android:id="@+id/insights_toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:minHeight="56dp"
+        android:minHeight="48dp"
         android:gravity="center_vertical"
         android:orientation="horizontal"
-        android:paddingStart="2dp"
+        android:paddingStart="4dp"
         android:paddingEnd="12dp" />
+
+    <TextView
+        android:id="@+id/insights_title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="20dp"
+        android:paddingTop="2dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="4dp"
+        android:text="@string/insights_title"
+        android:fontFamily="sans-serif"
+        android:includeFontPadding="false"
+        android:textColor="@color/insights_navy"
+        android:textSize="32sp"
+        android:textStyle="bold" />
+
+    <com.google.android.material.tabs.TabLayout
+        android:id="@+id/insights_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:minHeight="48dp"
+        android:background="@color/insights_white"
+        android:saveEnabled="false"
+        app:tabGravity="fill"
+        app:tabIndicatorColor="@color/insights_blue"
+        app:tabIndicatorFullWidth="true"
+        app:tabIndicatorHeight="3dp"
+        app:tabMinWidth="0dp"
+        app:tabMode="fixed"
+        app:tabPaddingStart="6dp"
+        app:tabPaddingEnd="6dp"
+        app:tabSelectedTextColor="@color/insights_blue"
+        app:tabTextAppearance="@style/TempoInsightsTabText"
+        app:tabTextColor="@color/insights_muted"
+        app:tabRippleColor="@color/insights_ice" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:layout_marginStart="20dp"
+        android:layout_marginEnd="20dp"
+        android:background="@color/insights_line"
+        android:importantForAccessibility="no" />
 
     <ScrollView
         android:id="@+id/insights_scroll"
@@ -22,6 +68,7 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:fillViewport="true"
+        android:saveEnabled="false"
         android:clipToPadding="false"
         android:scrollbars="none">
 
@@ -31,8 +78,8 @@
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:paddingStart="20dp"
-            android:paddingTop="8dp"
+            android:paddingTop="16dp"
             android:paddingEnd="20dp"
-            android:paddingBottom="32dp" />
+            android:paddingBottom="24dp" />
     </ScrollView>
 </LinearLayout>

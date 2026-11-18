@@ -8,7 +8,8 @@ import java.util.*;
 /** Only Android API calls used by the production store/DAOs; SQL is executed by real SQLite. */
 public final class SQLiteDatabase implements AutoCloseable {
     public static final int CONFLICT_IGNORE=4;
-    private final Process process;private final BufferedWriter in;private final BufferedReader out;private boolean committed;
+    private final Process process;private final BufferedWriter in;private final BufferedReader out;private final Deque<Boolean> committed = new ArrayDeque<>();
+    private boolean rollback;
     public SQLiteDatabase(){try{
         process=new ProcessBuilder(System.getProperty("python","python3"),"-u",System.getProperty("sqlite.bridge")).redirectError(ProcessBuilder.Redirect.INHERIT).start();
         in=new BufferedWriter(new OutputStreamWriter(process.getOutputStream(),StandardCharsets.UTF_8));
@@ -44,9 +45,15 @@ public final class SQLiteDatabase implements AutoCloseable {
     public int delete(String table,String where,String[] values){return Integer.parseInt(send("e","DELETE FROM "+table+(where==null?"":" WHERE "+where),args(values))[1]);}
     public void execSQL(String sql){send("e",sql,Collections.emptyList());}
     public void setForeignKeyConstraintsEnabled(boolean enabled){execSQL("PRAGMA foreign_keys="+(enabled?"ON":"OFF"));}
-    public void beginTransaction(){committed=false;execSQL("BEGIN");}
+    public void beginTransaction(){
+        if (committed.isEmpty()) { execSQL("BEGIN"); rollback=false; }
+        committed.push(false);
+    }
     public void beginTransactionNonExclusive(){beginTransaction();}
-    public void setTransactionSuccessful(){committed=true;}
-    public void endTransaction(){execSQL(committed?"COMMIT":"ROLLBACK");committed=false;}
+    public void setTransactionSuccessful(){committed.pop(); committed.push(true);}
+    public void endTransaction(){
+        if (!committed.pop()) rollback=true;
+        if (committed.isEmpty()) execSQL(rollback ? "ROLLBACK" : "COMMIT");
+    }
     public void close(){try{in.close();process.destroy();}catch(IOException e){throw new RuntimeException(e);}}
 }

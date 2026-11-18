@@ -19,7 +19,7 @@ def literal(expression):
     return "".join(json.loads(s) for s in re.findall(r'"(?:\\.|[^"\\])*"', expression))
 
 
-base_schema = [literal(s) for s in re.findall(r"db\.execSQL\((.*?)\);", database_source, re.S)]
+base_schema = [literal(s) for s in re.findall(r"db\.execSQL\((.*?)\);", database_source.split("public void onUpgrade")[0], re.S)]
 new_schema = [literal(s) for s in re.findall(r"db\.execSQL\((.*?)\);", learning_source, re.S) if literal(s).startswith("CREATE")]
 sample_sql = literal(re.search(r"String sql = (.*?);", learning_source, re.S).group(1))
 db = sqlite3.connect(":memory:")

@@ -54,13 +54,13 @@ public final class ScheduleModelAdapter {
         return result;
     }
 
-    /** Only manually fixed past slots remain planned after regenerating automatic work. */
-    public static Map<Long, Integer> retainedPastMinutes(List<ScheduleItem> existing, long earliest) {
+    /** Only the future portion of an ongoing manual slot reserves outstanding work. */
+    public static Map<Long, Integer> ongoingMinutes(List<ScheduleItem> existing, long earliest) {
         Map<Long, Integer> minutes = new HashMap<>();
         for (ScheduleItem item : existing) {
             if ("PLANNED".equals(item.getStatus()) && item.isManuallyEdited()
-                    && item.getStartTime() < earliest) {
-                int duration = (int) ((item.getEndTime() - item.getStartTime()) / 60_000L);
+                    && item.getStartTime() < earliest && earliest < item.getEndTime()) {
+                int duration = (int) ((item.getEndTime() - earliest) / 60_000L);
                 minutes.merge((long) item.getTaskId(), duration, Integer::sum);
             }
         }

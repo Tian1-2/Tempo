@@ -95,7 +95,7 @@ public final class LearningStore {
         public long id, savedAt;
         public int taskId, difficulty, revision;
         public Integer minutes;
-        public String title, outcome, source;
+        public String title, outcome, source, category;
     }
 
     public Prepared prepare(int taskId, long now) {
@@ -104,7 +104,7 @@ public final class LearningStore {
         try {
             refreshPredictionsInTransaction(db, now);
             Task task = new TaskDao(helper).getTaskById(taskId);
-            if (task == null) throw new IllegalArgumentException("Task no longer exists.");
+            if (task == null || task.isArchived()) throw new IllegalArgumentException("Task no longer exists.");
             if ("COMPLETED".equals(task.getStatus())) throw new IllegalArgumentException("This task is already completed.");
             long actual = actualMinutes(db, taskId);
             capture(db, task, actual, now);
@@ -150,7 +150,7 @@ public final class LearningStore {
             Saved existing = receipt(token, taskId);
             if (existing != null) { db.setTransactionSuccessful(); return existing; }
             Task task = new TaskDao(helper).getTaskById(taskId);
-            if (task == null || "COMPLETED".equals(task.getStatus())) throw new IllegalArgumentException("This task is missing or already completed.");
+            if (task == null || task.isArchived() || "COMPLETED".equals(task.getStatus())) throw new IllegalArgumentException("This task is missing or already completed.");
             // prepare() normally captures before timing. A recovery save without a snapshot is not evaluable.
             try (Cursor c = db.rawQuery("SELECT task_id FROM learning_snapshots WHERE task_id=?", new String[]{String.valueOf(taskId)})) {
                 if (!c.moveToFirst()) capture(db, task, Math.max(1, actualMinutes(db, taskId)), now);
@@ -227,7 +227,7 @@ public final class LearningStore {
 
     public EditContext editContext(int taskId) {
         SQLiteDatabase db=helper.getReadableDatabase(); Task task=new TaskDao(helper).getTaskById(taskId);
-        if(task==null) throw new IllegalArgumentException("Task no longer exists.");
+        if(task==null || task.isArchived()) throw new IllegalArgumentException("Task no longer exists.");
         boolean started=hasFeedback(db,taskId);
         try(Cursor c=db.rawQuery("SELECT task_id FROM learning_snapshots WHERE task_id=?",new String[]{String.valueOf(taskId)})) {started|=c.moveToFirst();}
         long recorded=actualMinutes(db,taskId);
@@ -239,11 +239,29 @@ public final class LearningStore {
         return profile==null?25:profile.getFocusDuration();
     }
 
+    /** Called inside the slot edit transaction after the user confirms the new remaining estimate. */
+    public void setPlanningRemaining(int taskId, int minutes, long now) {
+        validateFeedback(null, 0, minutes);
+        SQLiteDatabase db = helper.getWritableDatabase();
+        Task task = new TaskDao(helper).getTaskById(taskId);
+        if (task == null || task.isArchived() || "COMPLETED".equals(task.getStatus()))
+            throw new IllegalArgumentException("This task is no longer available for planning.");
+        capture(db, task, actualMinutes(db, taskId), now);
+        ContentValues values = new ContentValues();
+        values.put("remaining_override", minutes);
+        try (Cursor c = db.rawQuery("SELECT COALESCE(MAX(feedback_id),0) FROM task_feedback WHERE task_id=?",
+                new String[]{String.valueOf(taskId)})) {
+            c.moveToFirst();
+            values.put("remaining_anchor_feedback_id", c.getLong(0));
+        }
+        db.update("learning_snapshots", values, "task_id=?", new String[]{String.valueOf(taskId)});
+    }
+
     public int updateTask(Task edited,Integer remaining,long now) {
         SQLiteDatabase db=helper.getWritableDatabase();db.beginTransaction();
         try {
             Task current=new TaskDao(helper).getTaskById(edited.getTaskId());
-            if(current==null) throw new IllegalArgumentException("Task no longer exists.");
+            if(current==null || current.isArchived()) throw new IllegalArgumentException("Task is archived or no longer exists.");
             EditContext context=editContext(current.getTaskId());
             boolean changed=current.getEstimatedDuration()!=edited.getEstimatedDuration()
                     || !Objects.equals(current.getCategory(),edited.getCategory())
@@ -270,15 +288,38 @@ public final class LearningStore {
 
     public List<Task> pendingTasks() {return new TaskDao(helper).getPendingTasks();}
 
+    public static final class History {
+        public final List<Record> rows;
+        public final int count, weekMinutes, finished;
+        History(List<Record> rows, int count, int weekMinutes, int finished) {
+            this.rows = rows; this.count = count; this.weekMinutes = weekMinutes; this.finished = finished;
+        }
+    }
+
+    public History history(long now) {
+        SQLiteDatabase db = helper.getReadableDatabase();
+        long start = com.tempo.app.insights.InsightsStats.weekStart(now, java.util.TimeZone.getDefault()).getTimeInMillis();
+        db.beginTransactionNonExclusive();
+        try (Cursor c = db.rawQuery("SELECT COUNT(*), COALESCE(SUM(CASE WHEN completed_at BETWEEN ? AND ? "
+                + "AND actual_duration>0 THEN actual_duration ELSE 0 END),0), "
+                + "COUNT(DISTINCT CASE WHEN completion_status='COMPLETED' THEN task_id END) FROM task_feedback",
+                new String[]{String.valueOf(start), String.valueOf(now)})) {
+            c.moveToFirst();
+            History result = new History(records(200), c.getInt(0), c.getInt(1), c.getInt(2));
+            db.setTransactionSuccessful();
+            return result;
+        } finally { db.endTransaction(); }
+    }
+
     public List<Record> records(int limit) {
         List<Record> records=new ArrayList<>();
         try(Cursor c=helper.getReadableDatabase().rawQuery("SELECT f.feedback_id,f.task_id,t.title,f.actual_duration,f.actual_difficulty," 
-                + "f.completion_status,f.completed_at,COALESCE(d.source,'LEGACY'),COALESCE(d.revision,0) "
+                + "f.completion_status,f.completed_at,COALESCE(d.source,'LEGACY'),COALESCE(d.revision,0),t.category "
                 + "FROM task_feedback f JOIN tasks t ON t.task_id=f.task_id LEFT JOIN session_details d ON d.feedback_id=f.feedback_id "
                 + "ORDER BY f.completed_at DESC,f.feedback_id DESC LIMIT ?",new String[]{String.valueOf(limit)})) {
             while(c.moveToNext()) {Record r=new Record();r.id=c.getLong(0);r.taskId=c.getInt(1);r.title=c.getString(2);
                 r.minutes=c.isNull(3)||c.getInt(3)<=0?null:c.getInt(3);r.difficulty=c.getInt(4);r.outcome=c.getString(5);r.savedAt=c.getLong(6);
-                r.source=c.getString(7);r.revision=c.getInt(8);records.add(r);}
+                r.category=c.getString(9);r.source=c.getString(7);r.revision=c.getInt(8);records.add(r);}
         }
         return records;
     }
@@ -390,6 +431,19 @@ public final class LearningStore {
             }
             int total = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
             result.put(task.getTaskId(), DurationLearning.remaining(total, actualMinutes(db, task.getTaskId()), override, focusMinutes));
+        }
+        return result;
+    }
+
+    /** Original estimates for the same completed, comparable tasks used by Insights MAE.
+     * Home must never evaluate history against today's editable task estimate. */
+    public Map<Integer, Integer> reviewEstimates(long now) {
+        Map<Integer, Integer> result = new HashMap<>();
+        for (DurationLearning.Sample sample : samples(helper.getReadableDatabase())) {
+            if (sample.evaluable && sample.estimate > 0 && sample.prediction > 0
+                    && sample.actual > 0 && sample.completedAt <= now) {
+                result.put(sample.taskId, sample.estimate);
+            }
         }
         return result;
     }

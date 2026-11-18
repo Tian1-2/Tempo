@@ -3,6 +3,7 @@ package com.tempo.app.scheduler;
 import android.os.Looper;
 import android.database.Cursor;
 import com.tempo.app.learning.LearningStore;
+import com.tempo.app.planning.ScheduleEditRules;
 import com.tempo.app.model.Task;
 
 import com.tempo.app.model.ScheduleItem;
@@ -44,7 +45,14 @@ public final class ScheduleService {
         }
         if (constraints == null) throw new IllegalArgumentException("Constraints are null");
         LearningStore learning = new LearningStore(RepositoryProvider.getDatabaseHelper());
-        learning.refreshPredictions(System.currentTimeMillis());
+        long now = System.currentTimeMillis();
+        learning.refreshPredictions(now);
+        checkFutureLocks(learning, now);
+        return planDay(date, constraints, learning, now);
+    }
+
+    private ScheduleGenerator.Result planDay(String date, ScheduleConstraintsProvider.DayConstraints constraints,
+            LearningStore learning, long now) {
         UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
         if (profile == null) throw new IllegalStateException("Set a user profile before generating a schedule");
         ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
@@ -57,11 +65,10 @@ public final class ScheduleService {
         long sleep = atTime(start, profile.getSleepTime());
         if (wake >= sleep) throw new IllegalArgumentException("Wake time must precede sleep time on the same day");
         List<Interval> blocked = new ArrayList<>(constraints.fixedBusyIntervals);
-        long now = System.currentTimeMillis();
         long earliest = Math.max(day.start, Math.floorDiv(now + MINUTE - 1, MINUTE) * MINUTE);
         if (day.start > now) earliest = day.start;
         for (ScheduleItem item : existing) {
-            if ("CANCELLED".equals(item.getStatus())
+            if (ScheduleItem.PAST_PLAN.equals(item.getStatus()) || "CANCELLED".equals(item.getStatus())
                     || ("PLANNED".equals(item.getStatus()) && !item.isManuallyEdited())) continue;
             if ("COMPLETED".equals(item.getStatus()) || "SKIPPED".equals(item.getStatus()) || item.getStartTime() < earliest) {
                 // Completed and manual past slots remain; reserve their following break too.
@@ -77,17 +84,17 @@ public final class ScheduleService {
                 new String[]{String.valueOf(day.start), String.valueOf(day.end), String.valueOf(now)})) {
             if (c.moveToFirst()) usedToday = c.getLong(0);
         }
-        Map<Long, Integer> retainedPastMinutes = ScheduleModelAdapter.retainedPastMinutes(existing, earliest);
-        for (int minutes : retainedPastMinutes.values()) usedToday += minutes;
+        Map<Long, Integer> ongoingMinutes = ScheduleModelAdapter.ongoingMinutes(existing, earliest);
+        for (int minutes : ongoingMinutes.values()) usedToday += minutes;
         int capacity = (int) Math.max(0, profile.getDailyCapacity() - usedToday);
         List<ScheduleGenerator.Session> lockedHere = ScheduleModelAdapter.lockedSessions(existing, earliest);
         Map<Long, Integer> lockedMinutes = new HashMap<>();
         for (ScheduleGenerator.Session s : lockedHere) {
             lockedMinutes.merge(s.taskId, (int) ((s.interval.end - s.interval.start) / MINUTE), Integer::sum);
         }
-        // Retained manual slots and work on other dates are already planned.
+        // Only future work in an ongoing manual slot or on another date is still reserved.
         Map<Long, Integer> alreadyPlanned = plannedOnOtherDates(date, now);
-        for (Map.Entry<Long, Integer> entry : retainedPastMinutes.entrySet()) {
+        for (Map.Entry<Long, Integer> entry : ongoingMinutes.entrySet()) {
             alreadyPlanned.merge(entry.getKey(), entry.getValue(), Integer::sum);
         }
         List<ScheduleGenerator.Task> tasks = ScheduleModelAdapter.subtractPlanned(
@@ -121,6 +128,9 @@ public final class ScheduleService {
      * adjusted and completed slots are kept. Call off the UI thread.
      */
     public ScheduleGenerator.Result generateRange(int days, ScheduleConstraintsProvider provider) {
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            throw new IllegalStateException("ScheduleService must run on a background thread");
+        }
         if (days < 1) throw new IllegalArgumentException("days must be at least 1");
         long now = System.currentTimeMillis();
         Calendar cursor = Calendar.getInstance();
@@ -132,16 +142,48 @@ public final class ScheduleService {
             cursor.add(Calendar.DAY_OF_MONTH, 1);
         }
         ScheduleRepository schedules = RepositoryProvider.getScheduleRepository();
-        for (int i = 0; i < dates.size(); i++) {
-            schedules.replaceGeneratedForDateSync(dates.get(i), Collections.<ScheduleItem>emptyList(), Long.MIN_VALUE);
+        android.database.sqlite.SQLiteDatabase db = RepositoryProvider.getDatabaseHelper().getWritableDatabase();
+        db.beginTransaction();
+        try {
+            LearningStore learning = new LearningStore(RepositoryProvider.getDatabaseHelper());
+            learning.refreshPredictions(now);
+            checkFutureLocks(learning, now);
+            for (String date : dates) {
+                schedules.replaceGeneratedForDateSync(date, Collections.<ScheduleItem>emptyList(), Long.MIN_VALUE);
+            }
+            List<ScheduleGenerator.Result> results = new ArrayList<>();
+            for (String date : dates) {
+                try {
+                    results.add(planDay(date, provider.getForDate(date), learning, now));
+                } catch (IllegalArgumentException conflict) {
+                    throw new IllegalArgumentException(date + " · " + conflict.getMessage(), conflict);
+                }
+            }
+            ScheduleGenerator.Result combined = ScheduleGenerator.Result.combine(results);
+            db.setTransactionSuccessful();
+            return combined;
+        } finally { db.endTransaction(); }
+    }
+
+    /** Feedback or an older installation can leave more time locked than the task still needs. */
+    private static void checkFutureLocks(LearningStore learning, long now) {
+        Map<Integer, Integer> locked = new HashMap<>();
+        try (Cursor c = RepositoryProvider.getDatabaseHelper().getReadableDatabase().rawQuery(
+                "SELECT task_id,start_time,end_time FROM schedule_items WHERE status='PLANNED' "
+                        + "AND is_manually_edited=1 AND end_time>?", new String[]{String.valueOf(now)})) {
+            while (c.moveToNext()) locked.merge(c.getInt(0),
+                    ScheduleEditRules.futureMinutes(c.getLong(1), c.getLong(2), now), Integer::sum);
         }
-        List<ScheduleGenerator.Result> results = new ArrayList<>();
-        for (String date : dates) {
-            ScheduleGenerator.Result day = generateAndSave(date, provider);
-            results.add(day);
-            if (day.unscheduledTasks.isEmpty()) break; // everything fits: later days have nothing to add
+        if (locked.isEmpty()) return;
+        List<Task> pending = RepositoryProvider.getTaskRepository().getPendingTasksSync();
+        UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
+        Map<Integer, Integer> remaining = learning.remaining(pending, profile == null ? 25 : profile.getFocusDuration());
+        for (Task task : pending) {
+            int minutes = locked.getOrDefault(task.getTaskId(), 0);
+            int left = remaining.get(task.getTaskId());
+            if (minutes > left) throw new IllegalArgumentException(task.getTitle() + " has " + left
+                    + " min remaining and " + minutes + " min locked. Open a locked slot to shorten it or update the remaining estimate.");
         }
-        return ScheduleGenerator.Result.combine(results);
     }
 
     /** Minutes per task still planned (not started) on other dates from today on. */

@@ -26,6 +26,7 @@ public class UserProfileDao {
         p.setBreakDuration(cursor.getInt(cursor.getColumnIndexOrThrow("break_duration")));
         p.setDailyCapacity(cursor.getInt(cursor.getColumnIndexOrThrow("daily_capacity")));
         p.setPreferredStartTime(cursor.getString(cursor.getColumnIndexOrThrow("preferred_start_time")));
+        p.setFixedBlocks(cursor.getString(cursor.getColumnIndexOrThrow("fixed_blocks")));
         return p;
     }
 
@@ -52,6 +53,8 @@ public class UserProfileDao {
         values.put("break_duration", p.getBreakDuration());
         values.put("daily_capacity", p.getDailyCapacity());
         values.put("preferred_start_time", p.getPreferredStartTime());
+
+        values.put("fixed_blocks", p.getFixedBlocks());
 
         UserProfile existing = getProfile();
         if (existing == null) {

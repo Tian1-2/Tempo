@@ -41,6 +41,7 @@ public class DailyReviewUnitTest {
         f.setTaskId(taskId);
         f.setActualDuration(minutes);
         f.setCompletedAt(at);
+        f.setCompletionStatus("PARTIAL");
         return f;
     }
 
@@ -48,7 +49,8 @@ public class DailyReviewUnitTest {
         List<Task> tasks = Collections.singletonList(task(1, "Essay", 60, "COMPLETED"));
         List<ScheduleItem> slots = Collections.singletonList(slot(1, 9 * 60, 10 * 60));
         List<TaskFeedback> fb = Collections.singletonList(feedback(1, 60, START + 10 * 60 * M));
-        DailyReview r = DailyReview.compute(START, END, slots, tasks, fb);
+        fb.get(0).setCompletionStatus("COMPLETED");
+        DailyReview r = DailyReview.compute(START, END, slots, tasks, fb, Collections.singletonMap(1, 60));
         assertEquals(1, r.plannedTasks);
         assertEquals(1, r.completedTasks);
         assertEquals(60, r.focusMinutes);
@@ -66,14 +68,15 @@ public class DailyReviewUnitTest {
                 feedback(1, 70, START + 11 * 60 * M),     // essay total 100 vs 60 -> +40
                 feedback(2, 40, START + 12 * 60 * M),     // reading 40 vs 30 -> +10
                 feedback(2, 99, END + M));                // after the day: ignored
-        DailyReview r = DailyReview.compute(START, END, slots, tasks, fb);
+        fb.get(1).setCompletionStatus("COMPLETED");
+        DailyReview r = DailyReview.compute(START, END, slots, tasks, fb, Collections.singletonMap(1, 60));
         assertEquals(110, r.focusMinutes);
         assertNotNull(r.overrun);
         assertEquals("Essay", r.overrun.title);
         assertEquals(100, r.overrun.actualMinutes);
         assertFalse(r.estimatesAccurate);
-        // completion 1/2 -> 25/50; focus min(1, 110/90) -> 30/30; accuracy avg(1-40/60, 1-10/30) = 0.5 -> 10/20
-        assertEquals(Integer.valueOf(65), r.score);
+        // completion 25/50; focus 30/30; only completed Essay is comparable: (1-40/60)*20.
+        assertEquals(Integer.valueOf(62), r.score);
         assertTrue(r.reminder().contains("Essay"));
     }
 

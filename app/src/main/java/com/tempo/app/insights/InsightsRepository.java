@@ -39,7 +39,7 @@ public final class InsightsRepository {
                 // A consistent snapshot of both tables. No records are inserted or updated.
                 db.beginTransactionNonExclusive();
                 try {
-                    stats = InsightsStats.calculate(new TaskDao(helper).getAllTasks(),
+                    stats = InsightsStats.calculate(new TaskDao(helper).getTasksWithHistory(),
                             new TaskFeedbackDao(helper).getAllFeedback(),
                             System.currentTimeMillis(), TimeZone.getDefault());
                     learning = new LearningStore(helper).summary(System.currentTimeMillis());

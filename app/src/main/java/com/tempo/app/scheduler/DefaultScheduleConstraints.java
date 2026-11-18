@@ -13,7 +13,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Default constraints used until the fixed-schedule table and D's learned windows exist:
+ * Weekly commitments and meal times come from the saved profile:
  * each meal blocks {@link #MEAL_MINUTES} minutes, and {@link #PRODUCTIVE_MINUTES} minutes from the
  * preferred start time form the productive window. Meal blocks overlapping a manually locked slot are
  * skipped, otherwise the generator rejects the request. Call {@link #getForDate(String)} off the UI thread.
@@ -27,10 +27,10 @@ public final class DefaultScheduleConstraints implements ScheduleConstraintsProv
         UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
         List<ScheduleItem> existing = RepositoryProvider.getScheduleRepository().getScheduleByDateSync(date);
         long dayStart = dayStartMillis(date);
-        return build(dayStart, dayStart + 24 * 60 * MINUTE, profile, existing);
+        return build(dayStart, FixedBlocks.at(dayStart, 1440), profile, existing);
     }
 
-    /** Pure computation for unit tests. Times are dayStart + hh:mm (Hong Kong has no DST). */
+    /** Pure computation for unit tests. Uses local wall-clock times on the selected date. */
     public static DayConstraints build(long dayStart, long dayEnd, UserProfile profile, List<ScheduleItem> existing) {
         List<Interval> busy = new ArrayList<>();
         List<Interval> productive = new ArrayList<>();
@@ -46,6 +46,7 @@ public final class DefaultScheduleConstraints implements ScheduleConstraintsProv
             Interval block = window(dayStart, dayEnd, meal, MEAL_MINUTES);
             if (block != null && !overlapsAny(block, locked)) busy.add(block);
         }
+        busy.addAll(FixedBlocks.intervals(profile.getFixedBlocks(), dayStart));
         Interval focus = window(dayStart, dayEnd, profile.getPreferredStartTime(), PRODUCTIVE_MINUTES);
         if (focus != null) productive.add(focus);
         return new DayConstraints(busy, productive);
@@ -54,7 +55,7 @@ public final class DefaultScheduleConstraints implements ScheduleConstraintsProv
     private static Interval window(long dayStart, long dayEnd, String hhmm, int minutes) {
         Integer offset = minutesOfDay(hhmm);
         if (offset == null) return null;
-        long start = dayStart + offset * MINUTE;
+        long start = FixedBlocks.at(dayStart, offset);
         long end = Math.min(start + minutes * MINUTE, dayEnd);
         return start < end ? new Interval(start, end) : null;
     }
