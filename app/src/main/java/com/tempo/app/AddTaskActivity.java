@@ -119,7 +119,25 @@ public class AddTaskActivity extends AppCompatActivity {
         body.addView(contentCard);
         space(body, 20);
 
-        section(body, "CATEGORY");
+        // "+ New category" sits on the section header, so it is visible however many categories exist.
+        LinearLayout categoryHeader = new LinearLayout(this);
+        categoryHeader.setGravity(Gravity.CENTER_VERTICAL);
+        section(categoryHeader, "CATEGORY");
+        ((LinearLayout.LayoutParams) categoryHeader.getChildAt(0).getLayoutParams()).width = 0;
+        ((LinearLayout.LayoutParams) categoryHeader.getChildAt(0).getLayoutParams()).weight = 1;
+        ((LinearLayout.LayoutParams) categoryHeader.getChildAt(0).getLayoutParams()).bottomMargin = 0;
+        TextView addCategory = text("+ New category", 13, com.tempo.app.ui.Ui.GREEN, true);
+        addCategory.setGravity(Gravity.CENTER);
+        addCategory.setMinHeight(dp(40));
+        addCategory.setPadding(dp(10), 0, 0, 0);
+        addCategory.setContentDescription("New category");
+        addCategory.setOnClickListener(v -> com.tempo.app.ui.CategoryDialogs.create(this, name -> {
+            category = name; renderTypes(null); renderCategories();
+        }));
+        categoryHeader.addView(addCategory);
+        LinearLayout.LayoutParams headerParams = new LinearLayout.LayoutParams(-1, -2);
+        headerParams.bottomMargin = dp(4);
+        body.addView(categoryHeader, headerParams);
         categoryRow = new LinearLayout(this);
         categoryRow.setOrientation(LinearLayout.HORIZONTAL);
         android.widget.HorizontalScrollView categoryScroll = new android.widget.HorizontalScrollView(this);
@@ -220,15 +238,6 @@ public class AddTaskActivity extends AppCompatActivity {
             categoryRow.addView(chip, params);
             chip.setOnClickListener(v -> { if (!key.equals(category)) { category = key; renderTypes(null); } renderCategories(); });
         }
-        TextView add = text("+ New", 14, com.tempo.app.ui.Ui.GREEN, true);
-        add.setGravity(Gravity.CENTER);
-        add.setPadding(dp(16), 0, dp(16), 0);
-        add.setBackground(shape(Color.WHITE, 14));
-        add.setContentDescription("New category");
-        add.setOnClickListener(v -> com.tempo.app.ui.CategoryDialogs.create(this, name -> {
-            category = name; renderTypes(null); renderCategories();
-        }));
-        categoryRow.addView(add, new LinearLayout.LayoutParams(-2, dp(46)));
     }
 
     private void renderTypes(String existing) {

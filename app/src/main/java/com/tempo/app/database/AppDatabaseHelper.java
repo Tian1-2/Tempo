@@ -16,7 +16,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
      * and integration (V4 tasks.archived + user_profile.fixed_blocks). Upgrades therefore check the
      * actual schema instead of trusting the version number.
      */
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 7; // V7: indexes only
 
     public AppDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -97,6 +97,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
         );
         com.tempo.app.learning.LearningStore.createTables(db);
         CategoryDao.createTable(db);
+        createIndexes(db);
     }
 
     @Override
@@ -116,6 +117,16 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                 + "ELSE 'PENDING' END WHERE status='DELETED'");
         CategoryDao.createTable(db); // custom categories and colours (IF NOT EXISTS)
         moveFixedEventsToProfile(db);
+        createIndexes(db);
+    }
+
+    /** V7: the schedule, Home and Insights look rows up by date, task and time; avoid full scans. */
+    static void createIndexes(SQLiteDatabase db) {
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedule_date_status ON schedule_items(scheduled_date, status)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_schedule_task ON schedule_items(task_id)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_feedback_task ON task_feedback(task_id)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_feedback_completed ON task_feedback(completed_at)");
+        db.execSQL("CREATE INDEX IF NOT EXISTS idx_tasks_archived_status ON tasks(archived, status)");
     }
 
     /** task-a V4/V5 kept weekly commitments in a fixed_events table; they now live in the profile. */

@@ -291,13 +291,13 @@ public class InsightsActivity extends AppCompatActivity {
         if (stats.categories.isEmpty()) {
             categories.addView(caption(getString(R.string.insights_categories_empty)));
         } else {
-            int[] tones = { Ui.GREEN, Ui.STUDY, Ui.MINT };
             int index = 0;
             for (InsightsStats.Category category : stats.categories) {
                 double share = (double) category.minutes / stats.recordedMinutes;
                 if (index > 0) gap(categories, 8);
-                barRow(categories, category.name, exactDuration(category.minutes) + " · " + Math.round(share * 100) + "%", share,
-                        tones[Math.min(index, tones.length - 1)], true);
+                // The same colour the category has on Home, the schedule and History.
+                barRow(categories, Ui.categoryName(category.name), exactDuration(category.minutes) + " · " + Math.round(share * 100) + "%", share,
+                        Ui.categoryColor(category.name), true);
                 index++;
             }
         }

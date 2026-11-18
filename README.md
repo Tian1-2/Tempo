@@ -83,7 +83,7 @@ app/src/main/java/com/tempo/app/
                 FixedBlocks (weekly commitments stored in the profile)
   learning/     duration learning, remaining work, feedback storage
   insights/     statistics and charts
-  database/     SQLiteOpenHelper (version 6) and DAOs (tasks, feedback, profile, schedule, categories)
+  database/     SQLiteOpenHelper (version 7) and DAOs (tasks, feedback, profile, schedule, categories)
   repository/   async repositories used by the screens
   model/        Task, ScheduleItem, UserProfile, TaskFeedback, Category
   reminders/    alarm scheduling, notification and reboot receivers

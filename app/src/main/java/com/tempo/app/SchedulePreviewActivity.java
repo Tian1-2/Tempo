@@ -231,10 +231,10 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             Button locate = new Button(this);
             locate.setText(fixed.size() + " fixed");
             locate.setAllCaps(false);
-            locate.setTextColor(Ui.GREEN);
+            locate.setTextColor(Ui.FIXED_INK);
             locate.setBackgroundTintList(null);
             locate.setBackground(new android.graphics.drawable.RippleDrawable(
-                    android.content.res.ColorStateList.valueOf(0x20347E5B), Ui.round(Ui.FIXED_SURFACE, dp(12)), null));
+                    android.content.res.ColorStateList.valueOf(0x20606A78), Ui.round(Ui.FIXED_BG, dp(12)), null));
             locate.setContentDescription("Find fixed commitments on this day");
             locate.setOnClickListener(v -> locateFixed(fixed));
             LinearLayout.LayoutParams findParams = new LinearLayout.LayoutParams(-2, dp(48));
@@ -483,7 +483,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             android.text.SpannableString caption = new android.text.SpannableString(prefix + "Fixed");
             int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
             caption.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), 0, title.length(), flags);
-            caption.setSpan(new android.text.style.ForegroundColorSpan(Ui.GREEN), prefix.length(), caption.length(), flags);
+            caption.setSpan(new android.text.style.ForegroundColorSpan(Ui.FIXED_INK), prefix.length(), caption.length(), flags);
             caption.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), prefix.length(), caption.length(), flags);
             TextView card = label("", 13, Ui.INK, false);
             card.setText(caption);

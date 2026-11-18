@@ -28,7 +28,7 @@ public final class FixedScheduleCheck {
             Task gone = new Task("Old deleted task", "Study", 30, 2, 2, 0);
             gone.setTaskId((int) new TaskDao(helper).insertTask(gone));
             db.execSQL("UPDATE tasks SET status='DELETED' WHERE task_id=" + gone.getTaskId());
-            helper.onUpgrade(db, 5, 6);
+            helper.onUpgrade(db, 5, 7);
             List<com.tempo.app.scheduler.FixedBlocks.Entry> blocks =
                     com.tempo.app.scheduler.FixedBlocks.entries(profiles.getProfile().getFixedBlocks());
             check(blocks.size() == 3, "fixed events appended to the profile's existing commitments");
@@ -39,8 +39,10 @@ public final class FixedScheduleCheck {
             check(number("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='fixed_events'") == 0, "fixed_events dropped after the move");
             check(number("SELECT archived FROM tasks WHERE task_id=" + gone.getTaskId()) == 1
                     && number("SELECT COUNT(*) FROM tasks WHERE status='DELETED'") == 0, "DELETED task becomes archived");
-            helper.onUpgrade(db, 4, 6); // integration V4 → V6 (and a second run) must be harmless
+            helper.onUpgrade(db, 4, 7); // integration V4 → V7 (and a second run) must be harmless
             check(com.tempo.app.scheduler.FixedBlocks.entries(profiles.getProfile().getFixedBlocks()).size() == 3, "upgrade is idempotent");
+            check(number("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'") == 5, "V7 indexes exist after upgrade");
+            check(number("SELECT COUNT(*) FROM pragma_index_list('schedule_items') WHERE name='idx_schedule_date_status'") == 1, "schedule lookup by date is indexed");
 
             Task task = new Task("Essay", "Study", 120, 3, 3, 0);
             task.setTaskId((int) new TaskDao(helper).insertTask(task));

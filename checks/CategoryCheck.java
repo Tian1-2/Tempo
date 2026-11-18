@@ -29,12 +29,12 @@ public final class CategoryCheck {
             db.execSQL("DROP TABLE categories");
             Task legacy = new Task("Old", "Volunteering", 30, 2, 2, 0);
             new TaskDao(helper).insertTask(legacy);
-            helper.onUpgrade(db, 5, 6);
+            helper.onUpgrade(db, 5, 7);
             List<String> names = new ArrayList<>();
             for (Category c : dao.getAll()) names.add(c.getName());
             check(names.subList(0, 3).equals(Arrays.asList("Study", "Work", "Life")), "upgrade seeds the three defaults first");
             check(names.contains("Volunteering") && !names.contains("Club"), "upgrade adopts categories used by tasks, not removed ones");
-            helper.onUpgrade(db, 5, 6);
+            helper.onUpgrade(db, 5, 7);
             check(number("SELECT COUNT(*) FROM categories") == names.size(), "category migration is idempotent");
         }
         System.out.println("PASS: " + count + " category assertions on real SQLite.");

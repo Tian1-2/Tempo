@@ -36,23 +36,41 @@ public final class Ui {
 
     public static final int FIXED_SURFACE = Color.rgb(239, 245, 242);
 
-    /** Both screens use the same rounded card and a four-dp stripe clipped to its left edge. */
+    /** Fixed commitments are neutral slate, so they never look like a (green) Study task. */
+    public static final int FIXED_BG = Color.rgb(238, 240, 243);
+    public static final int FIXED_INK = Color.rgb(96, 106, 120);
+
+    /**
+     * Both screens use the same rounded card: a light slate surface with faint diagonal hatching
+     * (busy time, not a task) and a four-dp slate stripe clipped to its left edge.
+     */
     public static GradientDrawable fixedBackground(Context context) {
         int radius = dp(context, 12);
         int stripeWidth = dp(context, 4);
-        GradientDrawable accent = round(GREEN, radius);
+        int gap = dp(context, 10);
+        GradientDrawable accent = round(FIXED_INK, radius);
+        android.graphics.Paint hatch = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+        hatch.setColor(Color.argb(28, 96, 106, 120));
+        hatch.setStrokeWidth(dp(context, 1));
         GradientDrawable surface = new GradientDrawable() {
             @Override public void draw(Canvas canvas) {
                 super.draw(canvas);
                 Rect bounds = getBounds();
                 int saved = canvas.save();
+                canvas.clipRect(bounds.left + stripeWidth, bounds.top + 1, bounds.right - 1, bounds.bottom - 1);
+                int h = bounds.height();
+                for (int x = bounds.left - h; x < bounds.right; x += gap) {
+                    canvas.drawLine(x, bounds.bottom, x + h, bounds.top, hatch);
+                }
+                canvas.restoreToCount(saved);
+                saved = canvas.save();
                 canvas.clipRect(bounds.left, bounds.top, bounds.left + stripeWidth, bounds.bottom);
                 accent.setBounds(bounds);
                 accent.draw(canvas);
                 canvas.restoreToCount(saved);
             }
         };
-        surface.setColor(FIXED_SURFACE);
+        surface.setColor(FIXED_BG);
         surface.setCornerRadius(radius);
         return surface;
     }
