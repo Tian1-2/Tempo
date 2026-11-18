@@ -26,6 +26,18 @@ public final class CategoryCheck {
             db.execSQL("UPDATE tasks SET category='Life' WHERE task_id=" + task.getTaskId());
             check(dao.countTasks("Club") == 0 && dao.delete("Club"), "after the task moves to another category, it can be removed");
 
+            // Rename carries tasks and learning history with it.
+            db.execSQL("INSERT INTO learning_snapshots(task_id, estimate, prediction, category, captured_at, evaluable) VALUES("
+                    + task.getTaskId() + ", 30, 30, 'Life', 0, 1)");
+            check(dao.rename("Life", "Personal")
+                    && number("SELECT COUNT(*) FROM tasks WHERE category='Personal'") == 1
+                    && number("SELECT COUNT(*) FROM learning_snapshots WHERE category='Personal'") == 1
+                    && number("SELECT COUNT(*) FROM categories WHERE name='Life'") == 0, "rename updates the list, tasks and learning snapshots");
+            check(!dao.rename("Personal", "study") && number("SELECT COUNT(*) FROM tasks WHERE category='Personal'") == 1,
+                    "rename onto an existing name is refused and changes nothing");
+            check(dao.rename("Personal", "PERSONAL") && number("SELECT COUNT(*) FROM tasks WHERE category='PERSONAL'") == 1, "case-only rename allowed");
+            dao.rename("PERSONAL", "Life");
+
             db.execSQL("DROP TABLE categories");
             Task legacy = new Task("Old", "Volunteering", 30, 2, 2, 0);
             new TaskDao(helper).insertTask(legacy);

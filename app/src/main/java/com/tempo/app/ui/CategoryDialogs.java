@@ -59,6 +59,46 @@ public final class CategoryDialogs {
         dialog.show();
     }
 
+    /** Asks for a new name; tasks, History and learning keep the category under its new name. */
+    public static void rename(Activity activity, Category category, Runnable after) {
+        LinearLayout form = new LinearLayout(activity);
+        form.setOrientation(LinearLayout.VERTICAL);
+        int pad = Ui.dp(activity, 20);
+        form.setPadding(pad, Ui.dp(activity, 8), pad, 0);
+        EditText name = new EditText(activity);
+        name.setSingleLine(true);
+        name.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_CAP_WORDS);
+        name.setFilters(new InputFilter[]{new InputFilter.LengthFilter(Category.MAX_NAME_LENGTH)});
+        name.setText(category.getName());
+        name.setSelectAllOnFocus(true);
+        form.addView(name);
+        form.addView(Ui.text(activity, "Tasks and History keep this category under the new name.", 12, Ui.MUTED, false));
+        AlertDialog dialog = new AlertDialog.Builder(activity).setTitle("Rename " + category.getName())
+                .setView(form).setNegativeButton("Cancel", null).setPositiveButton("Rename", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            String value = name.getText().toString().trim();
+            String problem = Category.validateName(value);
+            Category clash = problem == null ? Categories.find(value) : null;
+            if (clash != null && !clash.getName().equalsIgnoreCase(category.getName())) problem = "\"" + value + "\" already exists.";
+            if (problem != null) { Toast.makeText(activity, problem, Toast.LENGTH_SHORT).show(); return; }
+            if (value.equals(category.getName())) { dialog.dismiss(); return; }
+            dialog.dismiss();
+            new Thread(() -> {
+                boolean ok;
+                try { ok = RepositoryProvider.getCategoryDao().rename(category.getName(), value); }
+                catch (RuntimeException e) { ok = false; }
+                Categories.reload(RepositoryProvider.getDatabaseHelper());
+                final boolean saved = ok;
+                activity.runOnUiThread(() -> {
+                    if (activity.isFinishing()) return;
+                    Toast.makeText(activity, saved ? "Renamed to " + value : "Could not rename the category.", Toast.LENGTH_SHORT).show();
+                    after.run();
+                });
+            }, "category-rename").start();
+        }));
+        dialog.show();
+    }
+
     /** Asks for a new colour for an existing category. */
     public static void recolor(Activity activity, Category category, Runnable after) {
         final int[] chosen = {category.getColor()};

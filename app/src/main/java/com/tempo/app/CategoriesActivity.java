@@ -43,7 +43,7 @@ public class CategoriesActivity extends Activity {
         Ui.space(body, 6);
         body.addView(Ui.title(this, "Categories"));
         Ui.space(body, 4);
-        body.addView(Ui.text(this, "Each task belongs to one category. Its colour marks the task on Home, the schedule and History.",
+        body.addView(Ui.text(this, "Each task belongs to one category. Its colour marks the task on Home, the schedule and History. Tap a name to rename it.",
                 14, Ui.MUTED, false));
         Ui.space(body, 18);
         LinearLayout card = Ui.card(this);
@@ -74,8 +74,13 @@ public class CategoriesActivity extends Activity {
         shape.setColor(category.getColor());
         dot.setBackground(shape);
         row.addView(dot, new LinearLayout.LayoutParams(dp(18), dp(18)));
-        TextView name = Ui.text(this, category.getName(), 15, Ui.INK, true);
+        // Tap the name to rename the category.
+        TextView name = Ui.text(this, category.getName() + "  ✎", 15, Ui.INK, true);
         name.setPadding(dp(12), 0, 0, 0);
+        name.setMinHeight(dp(48));
+        name.setGravity(Gravity.CENTER_VERTICAL);
+        name.setContentDescription("Rename " + category.getName());
+        name.setOnClickListener(v -> CategoryDialogs.rename(this, category, this::render));
         row.addView(name, new LinearLayout.LayoutParams(0, -2, 1));
         TextView colour = action("Colour", Ui.GREEN);
         colour.setOnClickListener(v -> CategoryDialogs.recolor(this, category, this::render));

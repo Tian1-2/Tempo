@@ -79,6 +79,36 @@ public class CategoryDao {
         }
     }
 
+    /**
+     * Renames a category everywhere it is stored: the list, every task (archived ones too) and the
+     * learning snapshots, so predictions keep their history. Returns false when another category
+     * already has the new name. A change of case only ("club" → "Club") is allowed.
+     */
+    public boolean rename(String from, String to) {
+        String problem = Category.validateName(to);
+        if (problem != null) throw new IllegalArgumentException(problem);
+        String name = to.trim();
+        SQLiteDatabase db = dbHelper.getWritableDatabase();
+        db.beginTransaction();
+        try {
+            try (Cursor c = db.rawQuery("SELECT COUNT(*) FROM categories WHERE name = ? COLLATE NOCASE "
+                    + "AND name <> ? COLLATE NOCASE", new String[]{name, from})) {
+                if (c.moveToFirst() && c.getInt(0) > 0) return false;
+            }
+            ContentValues category = new ContentValues();
+            category.put("name", name);
+            if (db.update("categories", category, "name = ? COLLATE NOCASE", new String[]{from}) == 0) return false;
+            ContentValues task = new ContentValues();
+            task.put("category", name);
+            db.update("tasks", task, "category = ? COLLATE NOCASE", new String[]{from});
+            db.update("learning_snapshots", task, "category = ? COLLATE NOCASE", new String[]{from});
+            db.setTransactionSuccessful();
+            return true;
+        } finally {
+            db.endTransaction();
+        }
+    }
+
     /** Removes an unused category; returns false while tasks still use it or it is the last one. */
     public boolean delete(String name) {
         if (countTasks(name) > 0 || getAll().size() <= 1) return false;
