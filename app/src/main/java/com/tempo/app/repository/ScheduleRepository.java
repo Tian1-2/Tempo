@@ -92,11 +92,15 @@ public class ScheduleRepository {
         scheduleDao.replaceGeneratedForDate(date, items, preserveBefore);
     }
 
+    public void updatePlannedTime(int scheduleId, String date, long start, long end, TaskRepository.Callback<Integer> callback) {
+        updatePlannedTime(scheduleId, date, start, end, null, callback);
+    }
+
     public void updatePlannedTime(int scheduleId, String date, long start, long end,
-                                  TaskRepository.Callback<Integer> callback) {
+                                  ScheduleDao.RemainingConflict confirmation, TaskRepository.Callback<Integer> callback) {
         executor.execute(() -> {
             try {
-                int rows = scheduleDao.updatePlannedTime(scheduleId, date, start, end);
+                int rows = scheduleDao.updatePlannedTime(scheduleId, date, start, end, confirmation);
                 mainHandler.post(() -> callback.onSuccess(rows));
             } catch (Exception e) {
                 mainHandler.post(() -> callback.onError(e));

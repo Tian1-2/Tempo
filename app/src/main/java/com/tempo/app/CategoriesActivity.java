@@ -94,7 +94,7 @@ public class CategoriesActivity extends Activity {
                 if (isFinishing()) return;
                 if (used > 0) {
                     new AlertDialog.Builder(this).setTitle(category.getName() + " is in use")
-                            .setMessage(used + (used == 1 ? " task uses" : " tasks use") + " this category. Move "
+                            .setMessage(used + (used == 1 ? " task uses" : " tasks use") + " this category (archived tasks count, so History keeps its colour). Move "
                                     + (used == 1 ? "it" : "them") + " to another category first.")
                             .setPositiveButton("OK", null).show();
                     return;

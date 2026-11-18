@@ -19,6 +19,7 @@ import android.widget.TextView;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.graphics.Insets;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.OneShotPreDrawListener;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
@@ -26,44 +27,53 @@ import androidx.core.view.WindowInsetsControllerCompat;
 import com.tempo.app.insights.InsightsIcon;
 import com.tempo.app.insights.InsightsRepository;
 import com.tempo.app.insights.InsightsStats;
+
+import com.google.android.material.tabs.TabLayout;
 import com.tempo.app.insights.RecordedTimeChart;
+import com.tempo.app.insights.TimeOfDayStats;
 import com.tempo.app.learning.LearningSummary;
 import com.tempo.app.learning.LearningRepository;
-import com.tempo.app.learning.LearningStore;
 import com.tempo.app.model.Task;
 import com.tempo.app.repository.TaskRepository;
-import com.tempo.app.insights.TimeOfDayStats;
-import java.util.List;
-import java.util.UUID;
+import com.tempo.app.ui.Ui;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
-/** Native, read-only Insights. All values come from the existing local database. */
+import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
+
+/** Displays one read-only snapshot in three views. Manual logging and history use the existing screens. */
 public class InsightsActivity extends AppCompatActivity {
-    private int white, ice, pale, navy, muted, blue, line;
+    private enum Page {
+        OVERVIEW("Overview"), ESTIMATES("Estimates"), PATTERNS("Patterns");
+
+        final String title;
+        Page(String title) { this.title = title; }
+    }
+
+    private Page page = Page.OVERVIEW;
+    private final int[] offsets = new int[Page.values().length];
     private LinearLayout content;
     private ScrollView scroll;
+    private TabLayout tabs;
     private InsightsIcon refresh;
     private InsightsRepository repository;
-    private boolean loading;
-    private int restoreScroll;
-    private boolean accuracyExpanded;
     private LearningRepository actions;
+    private InsightsStats stats;
+    private LearningSummary learning;
+    private boolean loading, accuracyExpanded, patternsExpanded;
+    // During layout changes scrollY can still belong to the preceding page.
+    private OneShotPreDrawListener restorePosition;
 
     @Override protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        white = Color.WHITE; // card fill; the page itself uses insights_white (off-white) from the layout
-        ice = getColor(R.color.insights_ice);
-        pale = getColor(R.color.insights_pale);
-        navy = getColor(R.color.insights_navy);
-        muted = getColor(R.color.insights_muted);
-        blue = getColor(R.color.insights_blue);
-        line = getColor(R.color.insights_line);
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         getWindow().setStatusBarColor(Color.TRANSPARENT);
-        getWindow().setNavigationBarColor(Build.VERSION.SDK_INT >= 26 ? Color.TRANSPARENT : navy);
+        getWindow().setNavigationBarColor(Build.VERSION.SDK_INT >= 26 ? Color.TRANSPARENT : Ui.INK);
         if (Build.VERSION.SDK_INT >= 29) {
             getWindow().setStatusBarContrastEnforced(false);
             getWindow().setNavigationBarContrastEnforced(false);
@@ -82,23 +92,82 @@ public class InsightsActivity extends AppCompatActivity {
         ViewCompat.requestApplyInsets(root);
         content = findViewById(R.id.insights_content);
         scroll = findViewById(R.id.insights_scroll);
-        if (savedInstanceState != null) restoreScroll = savedInstanceState.getInt("insightsScroll", 0);
+
+        tabs = findViewById(R.id.insights_tabs);
+        ViewCompat.setAccessibilityHeading(findViewById(R.id.insights_title), true);
+        if (savedInstanceState != null) {
+            int restored = savedInstanceState.getInt("insightsPage");
+            if (restored >= 0 && restored < Page.values().length) page = Page.values()[restored];
+            int[] savedOffsets = savedInstanceState.getIntArray("insightsOffsets");
+            if (savedOffsets != null && savedOffsets.length == offsets.length) {
+                System.arraycopy(savedOffsets, 0, offsets, 0, offsets.length);
+            }
+            accuracyExpanded = savedInstanceState.getBoolean("accuracyExpanded");
+            patternsExpanded = savedInstanceState.getBoolean("patternsExpanded");
+        }
         buildToolbar();
+        buildTabs();
         repository = new InsightsRepository(this);
         actions = new LearningRepository(this);
-        if(savedInstanceState!=null) accuracyExpanded=savedInstanceState.getBoolean("accuracyExpanded",false);
     }
 
-    @Override protected void onResume() { super.onResume(); load(); }
+    @Override protected void onResume() {
+        super.onResume();
+        load();
+    }
+
     @Override protected void onDestroy() {
-        if (repository != null) repository.close();
-        if(actions!=null) actions.close();
+        cancelRestore();
+        repository.close();
+        actions.close();
         super.onDestroy();
     }
+
     @Override protected void onSaveInstanceState(Bundle state) {
-        state.putInt("insightsScroll", scroll.getScrollY());
-        state.putBoolean("accuracyExpanded",accuracyExpanded);
+        rememberPosition();
+        state.putInt("insightsPage", page.ordinal());
+        state.putIntArray("insightsOffsets", offsets.clone());
+        state.putBoolean("accuracyExpanded", accuracyExpanded);
+        state.putBoolean("patternsExpanded", patternsExpanded);
         super.onSaveInstanceState(state);
+    }
+
+    private void buildTabs() {
+        if (stackColumns()) tabs.setTabMode(TabLayout.MODE_SCROLLABLE);
+        for (Page item : Page.values()) {
+            tabs.addTab(tabs.newTab().setText(item.title), item == page);
+        }
+        tabs.addOnTabSelectedListener(new TabLayout.OnTabSelectedListener() {
+            @Override public void onTabSelected(TabLayout.Tab tab) {
+                Page next = Page.values()[tab.getPosition()];
+                if (page == next) return;
+                rememberPosition();
+                page = next;
+                if (stats != null) render();
+            }
+            @Override public void onTabUnselected(TabLayout.Tab tab) { }
+            @Override public void onTabReselected(TabLayout.Tab tab) { }
+        });
+    }
+
+    private void rememberPosition() {
+        if (stats != null && restorePosition == null) offsets[page.ordinal()] = scroll.getScrollY();
+    }
+
+    private void cancelRestore() {
+        if (restorePosition != null) {
+            restorePosition.removeListener();
+            restorePosition = null;
+        }
+    }
+
+    private void restorePositionAfterLayout() {
+        cancelRestore();
+        final int savedY = offsets[page.ordinal()];
+        restorePosition = OneShotPreDrawListener.add(scroll, () -> {
+            restorePosition = null;
+            scroll.scrollTo(0, savedY);
+        });
     }
 
     private void buildToolbar() {
@@ -106,50 +175,63 @@ public class InsightsActivity extends AppCompatActivity {
         InsightsIcon back = iconButton(InsightsIcon.Kind.BACK, R.string.insights_back);
         back.setOnClickListener(v -> finish());
         toolbar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView home = label(getString(R.string.insights_home), 14, muted, false);
+        TextView home = label(getString(R.string.insights_home), 14, Ui.MUTED, false);
         home.setGravity(Gravity.CENTER_VERTICAL);
+        home.setOnClickListener(v -> finish());
         toolbar.addView(home, new LinearLayout.LayoutParams(0, -2, 1));
         InsightsIcon info = iconButton(InsightsIcon.Kind.INFO, R.string.insights_definitions);
         info.setOnClickListener(v -> showDefinitions());
         toolbar.addView(info, new LinearLayout.LayoutParams(dp(48), dp(48)));
         refresh = iconButton(InsightsIcon.Kind.REFRESH, R.string.insights_refresh);
-        refresh.setOnClickListener(v -> { restoreScroll = scroll.getScrollY(); load(); });
+        refresh.setOnClickListener(v -> load());
         toolbar.addView(refresh, new LinearLayout.LayoutParams(dp(48), dp(48)));
     }
+
 
     private void load() {
         if (loading) return;
         loading = true;
+        rememberPosition();
         refresh.setEnabled(false);
-        refresh.setAlpha(.4f);
-        header();
-        LinearLayout card = card(ice, false);
-        ProgressBar progress = new ProgressBar(this);
-        progress.setIndeterminateTintList(ColorStateList.valueOf(blue));
-        card.addView(progress, new LinearLayout.LayoutParams(dp(28), dp(28)));
-        gap(card, 16);
-        card.addView(label(getString(R.string.insights_loading), 20, navy, true));
-        gap(card, 8);
-        card.addView(label(getString(R.string.insights_loading_body), 14, muted, false));
-        ViewCompat.setAccessibilityLiveRegion(card, ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
-        addCard(card);
+        refresh.setAlpha(.45f);
+        if (stats == null) {
+            content.removeAllViews();
+            LinearLayout panel = panel(Ui.MINT_SOFT, false);
+            ProgressBar spinner = new ProgressBar(this);
+            spinner.setIndeterminateTintList(ColorStateList.valueOf(Ui.GREEN));
+            panel.addView(spinner, new LinearLayout.LayoutParams(dp(24), dp(24)));
+            gap(panel, 12);
+            panel.addView(label(getString(R.string.insights_loading), 16, Ui.INK, true));
+            ViewCompat.setAccessibilityLiveRegion(panel, ViewCompat.ACCESSIBILITY_LIVE_REGION_POLITE);
+            content.addView(panel);
+        }
         repository.load(new InsightsRepository.Callback() {
-            @Override public void onLoaded(InsightsStats stats, LearningSummary learning) {
+            @Override public void onLoaded(InsightsStats newStats, LearningSummary newLearning) {
                 if (isFinishing() || isDestroyed()) return;
+                rememberPosition();
+                stats = newStats;
+                learning = newLearning;
                 finishLoading();
-                render(stats, learning);
+                render();
             }
+
             @Override public void onError() {
                 if (isFinishing() || isDestroyed()) return;
+                rememberPosition();
+                cancelRestore();
+                stats = null;
+                learning = null;
                 finishLoading();
-                header();
-                LinearLayout error = card(ice, false);
-                error.addView(label(getString(R.string.insights_error), 22, navy, true));
-                gap(error, 8);
-                error.addView(label(getString(R.string.insights_error_body), 14, muted, false));
+                content.removeAllViews();
+                LinearLayout error = panel(Ui.MINT_SOFT, false);
+                heading(error, getString(R.string.insights_error));
+                error.addView(label(getString(R.string.insights_error_body), 14, Ui.MUTED, false));
                 gap(error, 16);
                 error.addView(action(getString(R.string.insights_retry), v -> load()));
-                addCard(error);
+                content.addView(error);
+                gap(content, 16);
+                showShortcuts();
+                scroll.scrollTo(0, 0);
             }
         });
     }
@@ -160,258 +242,253 @@ public class InsightsActivity extends AppCompatActivity {
         refresh.setAlpha(1f);
     }
 
-    private void header() {
+    private void render() {
         content.removeAllViews();
-        TextView title = label(getString(R.string.insights_title), 34, navy, true);
-        ViewCompat.setAccessibilityHeading(title, true);
-        content.addView(title);
-        gap(content, 8);
-        content.addView(label(getString(R.string.insights_subtitle), 15, muted, false));
-        gap(content, 16);
-        LinearLayout shortcuts=row();
-        shortcuts.addView(action("Log activity",v->logActivity()),new LinearLayout.LayoutParams(0,-2,1));
-        LinearLayout.LayoutParams historyParams=new LinearLayout.LayoutParams(0,-2,1);historyParams.leftMargin=dp(12);
-        shortcuts.addView(action("Activity history",v->startActivity(new Intent(this,SessionHistoryActivity.class))),historyParams);
-        content.addView(shortcuts);gap(content,20);
+        switch (page) {
+            case OVERVIEW: showOverview(); break;
+            case ESTIMATES: showEstimates(); break;
+            case PATTERNS: showPatterns(); break;
+        }
+        restorePositionAfterLayout();
     }
 
-    private void render(InsightsStats stats, LearningSummary learning) {
-        header();
-        LinearLayout hero = card(ice, false);
-        LinearLayout heroTop = row();
-        heroTop.addView(new InsightsIcon(this, InsightsIcon.Kind.BARS, blue),
-                new LinearLayout.LayoutParams(dp(24), dp(24)));
-        TextView kicker = label(getString(R.string.insights_week), 12, blue, true);
-        kicker.setLetterSpacing(.10f);
-        LinearLayout.LayoutParams kickerParams = new LinearLayout.LayoutParams(-2, -2);
-        kickerParams.leftMargin = dp(12);
-        heroTop.addView(kicker, kickerParams);
-        hero.addView(heroTop);
-        gap(hero, 20);
-        String headline, detail;
-        LearningSummary.Preview next=null;
-        for(LearningSummary.Preview preview:learning.previews) if(!preview.fixed && preview.samples>0 && preview.prediction!=preview.estimate) {next=preview;break;}
-        if(next!=null) {
-            kicker.setText(R.string.insights_estimate_preview);
-            headline=next.prediction>next.estimate?"Make a little more room for this task.":"A lighter estimate for this task.";
-            detail=next.title+": "+next.estimate+" → "+next.prediction+" min. Based on "+next.samples+" completed "+next.basis+" "+(next.samples==1?"task.":"tasks.");
-        } else if (stats.recordedMinutes == 0) {
-            headline = getString(R.string.insights_empty_title);
-            detail = getString(R.string.insights_empty_body);
-        } else if (stats.sessionCount >= 3 && !stats.categories.isEmpty()
-                && stats.categories.get(0).minutes > stats.recordedMinutes / 2.0) {
-            InsightsStats.Category top = stats.categories.get(0);
-            String category = top.name;
-            if (category.equals("Study") || category.equals("Work") || category.equals("Life")) {
-                category = category.toLowerCase(Locale.ENGLISH);
-            }
-            headline = getString(R.string.insights_hero_category, category);
-            detail = getString(R.string.insights_hero_category_body, duration(top.minutes));
-        } else {
-            headline = getString(R.string.insights_hero_days);
-            detail = getString(R.string.insights_hero_days_body, duration(stats.recordedMinutes), stats.activeDays);
-        }
-        hero.addView(label(headline, 24, navy, true));
-        gap(hero, 12);
-        hero.addView(label(detail, 14, muted, false));
+    private void showOverview() {
+        eyebrow(content, "Last 7 days");
+        SimpleDateFormat day = new SimpleDateFormat("MMM d", Locale.ENGLISH);
+        content.addView(caption(day.format(new Date(stats.dayStarts[0])) + " – "
+                + day.format(new Date(stats.dayStarts[6]))));
+        gap(content, 12);
+
+        LinearLayout recorded = metric(duration(stats.recordedMinutes), "Recorded time",
+                count(stats.sessionCount, "saved session", "saved sessions"), Ui.MINT_SOFT, 33);
+        String completion = stats.taskCount == 0 ? "—" : stats.completionPercent() + "%";
+        String taskLabel = stats.taskCount == 0 ? "No tasks yet" : stats.completedTasks + " of "
+                + count(stats.taskCount, "task", "tasks");
+        LinearLayout completed = metric(completion, "Overall completion",
+                taskLabel + "\nAll history", Ui.FIXED_SURFACE, 33);
+        pair(content, recorded, completed);
+        gap(content, 20);
+
+        titleAndValue(content, "Your week", stats.recordedMinutes + " min");
         if (stats.recordedMinutes == 0) {
-            gap(hero, 16);
-            hero.addView(action(getString(R.string.insights_open_schedule), v -> openSchedule()));
-        }
-        addCard(hero);
-        learningCard(learning);
-        summary(stats);
-        chart(stats);
-        categories(stats);
-        accuracyCard(learning);
-        difficultyCard(stats,learning);
-        habitsCard(stats,learning);
-        timeOfDayCard(learning.timeOfDay);
-        gap(content, 8);
-        TextView footer = label(getString(R.string.insights_footer), 12, muted, false);
-        footer.setGravity(Gravity.CENTER);
-        content.addView(footer);
-        scroll.post(() -> scroll.scrollTo(0, restoreScroll));
-    }
-
-    private void summary(InsightsStats stats) {
-        LinearLayout group = new LinearLayout(this);
-        boolean stack = getResources().getConfiguration().screenWidthDp < 340
-                || getResources().getConfiguration().fontScale > 1.25f;
-        group.setOrientation(stack ? LinearLayout.VERTICAL : LinearLayout.HORIZONTAL);
-        LinearLayout completion = metric(InsightsIcon.Kind.CHECK,
-                stats.taskCount == 0 ? "—" : stats.completionPercent() + "%",
-                getString(R.string.insights_completion), stats.taskCount == 0
-                        ? getString(R.string.insights_no_tasks)
-                        : getString(stats.taskCount == 1 ? R.string.insights_completion_detail_one
-                                : R.string.insights_completion_detail, stats.completedTasks, stats.taskCount));
-        LinearLayout time = metric(InsightsIcon.Kind.CLOCK, duration(stats.recordedMinutes),
-                getString(R.string.insights_time), getString(stats.sessionCount == 1 ? R.string.insights_time_detail_one
-                        : R.string.insights_time_detail, stats.sessionCount));
-        LinearLayout.LayoutParams first = new LinearLayout.LayoutParams(stack ? -1 : 0, stack ? -2 : -1, stack ? 0 : 1);
-        LinearLayout.LayoutParams second = new LinearLayout.LayoutParams(stack ? -1 : 0, stack ? -2 : -1, stack ? 0 : 1);
-        if (stack) second.topMargin = dp(12); else second.leftMargin = dp(12);
-        group.addView(completion, first);
-        group.addView(time, second);
-        content.addView(group, new LinearLayout.LayoutParams(-1, -2));
-        gap(content, 16);
-    }
-
-    private LinearLayout metric(InsightsIcon.Kind kind, String value, String title, String detail) {
-        LinearLayout card = card(pale, false);
-        card.setPadding(dp(16), dp(20), dp(16), dp(20));
-        card.addView(new InsightsIcon(this, kind, blue), new LinearLayout.LayoutParams(dp(24), dp(24)));
-        gap(card, 16);
-        card.addView(label(value, 28, navy, true));
-        gap(card, 6);
-        card.addView(label(title, 14, navy, true));
-        gap(card, 6);
-        card.addView(label(detail, 13, muted, false));
-        return card;
-    }
-
-    private void chart(InsightsStats stats) {
-        LinearLayout card = card(white, true);
-        heading(card, getString(R.string.insights_chart_title));
-        SimpleDateFormat format = new SimpleDateFormat("MMM d", Locale.ENGLISH);
-        card.addView(label(format.format(new Date(stats.dayStarts[0])) + " – "
-                + format.format(new Date(stats.dayStarts[6])), 13, muted, false));
-        gap(card, 16);
-        if (stats.recordedMinutes == 0) {
-            TextView empty = label(getString(R.string.insights_chart_empty), 14, muted, false);
-            empty.setGravity(Gravity.CENTER);
-            empty.setPadding(0, dp(28), 0, dp(28));
-            card.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+            gap(content, 8);
+            content.addView(caption(getString(R.string.insights_chart_empty)));
+            gap(content, 12);
+            content.addView(action(getString(R.string.insights_open_schedule), v -> openSchedule()));
         } else {
-            int height = dp(184) + (int) (26 * getResources().getDisplayMetrics().scaledDensity);
-            card.addView(new RecordedTimeChart(this, stats), new LinearLayout.LayoutParams(-1, height));
+            gap(content, 6);
+            int chartHeight = dp(100) + Math.round(30 * getResources().getDisplayMetrics().scaledDensity);
+            content.addView(new RecordedTimeChart(this, stats),
+                    new LinearLayout.LayoutParams(MATCH_PARENT, chartHeight));
+            TextView note = caption("Recorded time · by save date");
+            note.setGravity(Gravity.CENTER);
+            content.addView(note);
         }
-        gap(card, 12);
-        card.addView(label(getString(R.string.insights_chart_note), 13, muted, false));
-        addCard(card);
-    }
+        gap(content, 20);
 
-    private void categories(InsightsStats stats) {
-        LinearLayout card = card(pale, false);
-        heading(card, getString(R.string.insights_categories));
-        card.addView(label(getString(R.string.insights_categories_note), 13, muted, false));
-        gap(card, 20);
+        LinearLayout categories = panel(Ui.MINT_SOFT, false);
+        heading(categories, "Where time went");
         if (stats.categories.isEmpty()) {
-            card.addView(label(getString(R.string.insights_categories_empty), 14, muted, false));
+            categories.addView(caption(getString(R.string.insights_categories_empty)));
         } else {
-            for (int i = 0; i < stats.categories.size(); i++) {
-                InsightsStats.Category category = stats.categories.get(i);
-                if (i > 0) gap(card, 20);
-                // Vertical text also accommodates long custom category names and large fonts.
-                card.addView(label(category.name, 15, navy, true));
-                gap(card, 4);
-                int percent = (int) Math.round(100.0 * category.minutes / stats.recordedMinutes);
-                card.addView(label(duration(category.minutes) + " · " + percent + "%", 13, muted, false));
-                gap(card, 8);
-                View track = new ShareBar(this, (float) category.minutes / stats.recordedMinutes, blue, line);
-                track.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                card.addView(track, new LinearLayout.LayoutParams(-1, dp(5)));
+            int[] tones = { Ui.GREEN, Ui.STUDY, Ui.MINT };
+            int index = 0;
+            for (InsightsStats.Category category : stats.categories) {
+                double share = (double) category.minutes / stats.recordedMinutes;
+                if (index > 0) gap(categories, 8);
+                barRow(categories, category.name, exactDuration(category.minutes) + " · " + Math.round(share * 100) + "%", share,
+                        tones[Math.min(index, tones.length - 1)], true);
+                index++;
             }
         }
-        addCard(card);
+        content.addView(categories);
+        gap(content, 12);
+        showShortcuts();
     }
 
-    private void learningCard(LearningSummary summary) {
-        LinearLayout card=card(ice,false);
-        heading(card,"Your time estimates");
-        card.addView(label(summary.historyTasks+" completed "+(summary.historyTasks==1?"task":"tasks")+" available · all history",13,muted,false));
-        if(summary.previews.isEmpty()) {
-            gap(card,12);card.addView(label("Add a task to see your next estimate. Completed tasks with fully recorded time help Tempo make small adjustments.",14,navy,false));
+    private void showShortcuts() {
+        TextView log = action("+  Log activity", v -> logActivity());
+        TextView history = action("History  ↗", v -> startActivity(new Intent(this, SessionHistoryActivity.class)));
+        history.setContentDescription("Activity history");
+        history.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.MINT_SOFT), null, shape(Ui.CARD, false)));
+        pair(content, log, history);
+    }
+
+    private void showEstimates() {
+        heading(content, "Estimate accuracy");
+        content.addView(caption(count(learning.evaluatedTasks, "evaluated task", "evaluated tasks") + " · all history"));
+        gap(content, 12);
+        LinearLayout comparison = panel(Ui.MINT_SOFT, false);
+        if (learning.evaluatedTasks == 0) {
+            heading(comparison, "No comparisons yet");
+            comparison.addView(caption("Record a task through completion to compare its original estimates with the time you saved."));
         } else {
-            gap(card,12);card.addView(label("Pending & in progress",13,muted,false));
-            for(LearningSummary.Preview preview:summary.previews) {
-                divider(card);card.addView(label(preview.title,16,navy,true));gap(card,8);
-                card.addView(label((preview.fixed?"Original estimate ":"Your estimate ")+preview.estimate+" min  →  Tempo "+preview.prediction+" min",15,blue,true));gap(card,6);
-                String basis=preview.fixed?"Saved prediction · fixed for this task":preview.samples==0?"No matching history yet · using your estimate"
-                        :"Based on "+preview.samples+" completed "+preview.basis+" "+(preview.samples==1?"task":"tasks");
-                card.addView(label(basis,13,muted,false));
-                if(preview.fixed) {gap(card,8);card.addView(label("Remaining for planning: "+preview.remaining+" min",14,navy,true));}
-                if(preview.scopeChanged) {gap(card,6);card.addView(label("Task scope changed. The original comparison is kept; this task is excluded from duration learning and accuracy.",12,muted,false));}
+            eyebrow(comparison, "Average error");
+            gap(comparison, 10);
+            pair(comparison, figure(decimal(learning.estimateMae) + " min", "Your estimates", Ui.INK, 25),
+                    figure(decimal(learning.predictionMae) + " min", "Tempo estimates", Ui.GREEN, 25));
+            gap(comparison, 16);
+            // Both lengths use the same scale. A perfect match produces an empty bar.
+            double largest = Math.max(learning.estimateMae, learning.predictionMae);
+            barRow(comparison, "Your estimates", decimal(learning.estimateMae) + " min",
+                    largest > 0 ? learning.estimateMae / largest : 0, Ui.STUDY, false);
+            gap(comparison, 5);
+            barRow(comparison, "Tempo estimates", decimal(learning.predictionMae) + " min",
+                    largest > 0 ? learning.predictionMae / largest : 0, Ui.GREEN, false);
+            gap(comparison, 10);
+            comparison.addView(caption("Lower is closer to recorded time."));
+        }
+        content.addView(comparison);
+        if (learning.evaluatedTasks > 0) {
+            gap(content, 10);
+            content.addView(caption(learning.evaluatedTasks == 1 ? "One evaluated task · early results"
+                    : "Based on the same completed tasks."));
+            gap(content, 16);
+            LinearLayout details = panel(Ui.CARD, true);
+            heading(details, "Mean absolute error");
+            details.addView(caption("For each task, take the absolute difference between the estimate and the recorded minutes. Average those differences across the evaluated tasks."));
+            gap(details, 12);
+            double bias = learning.predictionBias;
+            details.addView(label("Tempo signed bias  " + signed(bias) + " min", 15, Ui.INK, true));
+            String biasNote = Math.round(Math.abs(bias) * 10) == 0
+                    ? "Positive and negative differences average to zero at this precision."
+                    : "Tempo's estimates were " + decimal(Math.abs(bias)) + " min "
+                            + (bias > 0 ? "higher" : "lower") + " than recorded time on average.";
+            gap(details, 5);
+            details.addView(caption(biasNote));
+            gap(details, 10);
+            details.addView(caption("Both figures use predictions saved before work began. Corrections to recorded minutes count. Missing, later-added or retrospectively logged time, changed task scope and older edits with uncertain history are excluded."));
+            disclosure("How this is calculated", details, true);
+        }
+        gap(content, 20);
+        heading(content, "Upcoming estimates");
+        content.addView(caption("Pending & in progress · " + count(learning.historyTasks,
+                "completed task", "completed tasks") + " available for learning"));
+        gap(content, 10);
+        LinearLayout list = panel(Ui.CARD, true);
+        if (learning.previews.isEmpty()) {
+            list.addView(caption("Add a task with an estimate to see its preview here."));
+        } else {
+            for (int i = 0; i < learning.previews.size(); i++) {
+                if (i > 0) divider(list);
+                previewRow(list, learning.previews.get(i));
             }
         }
-        addCard(card);
+        content.addView(list);
     }
 
-    private void accuracyCard(LearningSummary summary) {
-        LinearLayout card=card(white,true);heading(card,"How close were the estimates?");
-        card.addView(label("All evaluated tasks · "+summary.evaluatedTasks+" "+(summary.evaluatedTasks==1?"task":"tasks"),13,muted,false));gap(card,12);
-        if(summary.evaluatedTasks==0) {
-            card.addView(label("No comparisons yet.",16,navy,true));gap(card,6);
-            card.addView(label("Start a task with the timer and record its work through completion. Tempo keeps the prediction from before you started.",13,muted,false));
+    private void previewRow(LinearLayout parent, LearningSummary.Preview item) {
+        LinearLayout original = column();
+        original.addView(label(item.title, 16, Ui.INK, true));
+        original.addView(caption((item.fixed ? "Original estimate " : "Your estimate ") + item.estimate + " min"));
+        LinearLayout predicted = column();
+        predicted.setGravity(stackColumns() ? Gravity.START : Gravity.END);
+        predicted.addView(caption("Tempo"));
+        predicted.addView(label(item.prediction + " min", 17, Ui.GREEN, true));
+        lineWithValue(parent, original, predicted);
+        gap(parent, 4);
+        String basis = item.samples == 0 ? "No matching history yet"
+                : "Based on " + count(item.samples, "completed " + item.basis + " task",
+                                                    "completed " + item.basis + " tasks");
+        parent.addView(caption(item.fixed ? "Saved prediction · " + item.remaining + " min remaining" : basis));
+        if (item.scopeChanged) parent.addView(caption("Scope changed · excluded from learning and accuracy."));
+    }
+
+    private void showPatterns() {
+        eyebrow(content, "Last 7 days");
+        gap(content, 10);
+        LinearLayout rhythm = panel(Ui.MINT_SOFT, false);
+        heading(rhythm, "Your rhythm");
+        rhythm.addView(figure(stats.activeDays + " / 7", "days with recorded time", Ui.INK, 33));
+        gap(rhythm, 14);
+        addWeek(rhythm);
+        gap(rhythm, 10);
+        rhythm.addView(caption("Unrecorded days may still include work."));
+        content.addView(rhythm);
+        gap(content, 18);
+
+        heading(content, "How tasks felt");
+        String rated = stats.ratedSessions > 0 ? decimal(stats.averageDifficulty) + " / 5" : "—";
+        boolean hasPairs = learning.difficultyComparisons > 0;
+        double delta = learning.difficultyDelta;
+        String deltaLabel = !hasPairs ? "Difference from expected" : Math.abs(delta) < .05 ? "As expected"
+                : delta > 0 ? "Above expected" : "Below expected";
+        pair(content, metric(rated, "Reported difficulty", null, Ui.MINT_SOFT, 25),
+                metric(hasPairs ? signed(learning.difficultyDelta) : "—", deltaLabel, null, Ui.FIXED_SURFACE, 25));
+        gap(content, 8);
+        content.addView(caption(stats.ratedSessions == 0 ? "No ratings yet · optional when saving a session."
+                : count(stats.ratedSessions, "saved rating", "saved ratings") + " · "
+                        + count(learning.difficultyComparisons, "paired rating", "paired ratings")));
+        gap(content, 18);
+
+        heading(content, "When you worked");
+        TimeOfDayStats timing = learning.timeOfDay;
+        long total = 0;
+        for (long millis : timing.millis) total += millis;
+        if (total == 0) {
+            content.addView(caption("Save a timer session with its measured duration to see your time of day."));
         } else {
-            card.addView(label("Average absolute error · lower is better",13,muted,false));gap(card,8);
-            card.addView(label(String.format(Locale.ENGLISH,"Your estimates  %.1f min",summary.estimateMae),15,navy,false));gap(card,4);
-            card.addView(label(String.format(Locale.ENGLISH,"Tempo estimates  %.1f min",summary.predictionMae),18,blue,true));gap(card,12);
-            card.addView(label(summary.evaluatedTasks==1?"One task is a starting point, not a trend.":"Same tasks, same recorded outcomes. More records are needed to assess a lasting improvement.",13,muted,false));
-            LinearLayout details=new LinearLayout(this);details.setOrientation(LinearLayout.VERTICAL);
-            details.setVisibility(accuracyExpanded?View.VISIBLE:View.GONE);
-            divider(details);
-            double bias=summary.predictionBias;
-            String explanation=Math.round(Math.abs(bias)*10)==0
-                    ?(summary.evaluatedTasks==1?"For this task, Tempo matched the recorded time.":"Positive and negative errors balance out on average; individual errors may still be large.")
-                    :String.format(Locale.ENGLISH,summary.evaluatedTasks==1?"For this task, Tempo estimated %.1f min %s than recorded time.":"Across these tasks, Tempo estimates were %.1f min %s than recorded time on average.",Math.abs(bias),bias>0?"higher":"lower");
-            details.addView(label(explanation,14,navy,false));gap(details,8);
-            details.addView(label(String.format(Locale.ENGLISH,"MAE · Your estimates %.1f / Tempo %.1f min",summary.estimateMae,summary.predictionMae),13,navy,false));gap(details,6);
-            details.addView(label(String.format(Locale.ENGLISH,"Signed bias: %+.1f min · estimate minus recorded time",Math.abs(bias)<.05?0.0:bias),12,muted,false));gap(details,8);
-            details.addView(label("Predictions were saved before work began. Corrections to already-recorded time are included. Missing or later-added time, changed task scope and retrospective manual entries are excluded. Older time edits with uncertain recording history are also excluded.",13,muted,false));
-            TextView toggle=action(accuracyExpanded?"Hide calculation details":"Show calculation details",v->{});
-            toggle.setOnClickListener(v->{accuracyExpanded=!accuracyExpanded;details.setVisibility(accuracyExpanded?View.VISIBLE:View.GONE);toggle.setText(accuracyExpanded?"Hide calculation details":"Show calculation details");});
-            card.addView(toggle);card.addView(details);
-        }
-        addCard(card);
-    }
-
-    private void difficultyCard(InsightsStats stats,LearningSummary summary) {
-        LinearLayout card=card(pale,false);heading(card,"How tasks felt");
-        card.addView(label("Last 7 days · optional session ratings",13,muted,false));gap(card,12);
-        if(stats.ratedSessions==0) card.addView(label("No ratings yet. Add one when saving an activity if you want to compare how it felt with your expectation.",14,muted,false));
-        else {
-            card.addView(label(String.format(Locale.ENGLISH,"%.1f / 5 reported difficulty",stats.averageDifficulty),18,navy,true));gap(card,6);
-            card.addView(label(stats.ratedSessions+" saved "+(stats.ratedSessions==1?"rating":"ratings")+" · unrated activities excluded",13,muted,false));
-        }
-        if(summary.difficultyComparisons>0) {
-            divider(card);double delta=summary.difficultyDelta;
-            String comparison=Math.round(Math.abs(delta)*10)==0?"Matched the expected difficulty on average.":String.format(Locale.ENGLISH,"Rated %.1f points %s than expected on average.",Math.abs(delta),delta>0?"higher":"lower");
-            card.addView(label(comparison,15,navy,true));gap(card,6);
-            card.addView(label(summary.difficultyComparisons+" paired "+(summary.difficultyComparisons==1?"rating":"ratings")+" · reported minus expected",13,muted,false));
-        }
-        addCard(card);
-    }
-
-    private void habitsCard(InsightsStats stats,LearningSummary summary) {
-        LinearLayout card=card(white,true);heading(card,"Completion & consistency");
-        card.addView(label(stats.activeDays+" of the last 7 days with recorded time",16,navy,true));gap(card,6);
-        card.addView(label("Days without records are not necessarily days without work.",13,muted,false));
-        if(summary.untimedRecords>0) {gap(card,12);card.addView(label(summary.untimedRecords+" untimed "+(summary.untimedRecords==1?"activity":"activities")+" saved in the last 7 days · excluded from time totals",13,muted,false));}
-        divider(card);
-        if(summary.deadlineTasks>0) {
-            card.addView(label(summary.onTimeTasks+" / "+summary.deadlineTasks+" completed by their deadline",16,navy,true));gap(card,6);
-            card.addView(label("Among completed tasks with a deadline saved before work began · all history. Unfinished overdue tasks are not included.",13,muted,false));
-        } else card.addView(label("No deadline comparisons yet. Completed tasks with a deadline saved before work began will appear here.",14,muted,false));
-        addCard(card);
-    }
-
-    private void timeOfDayCard(TimeOfDayStats stats) {
-        LinearLayout card=card(pale,false);heading(card,"When you worked");
-        card.addView(label("Last 7 days · active timer intervals",13,muted,false));gap(card,12);
-        long total=0;for(long value:stats.millis)total+=value;
-        if(total==0) card.addView(label("Save a new timer session to start seeing your time-of-day pattern. Earlier records and manual entries do not contain reliable execution intervals.",14,muted,false));
-        else {
-            for(int i=0;i<stats.millis.length;i++) {
-                if(i>0)gap(card,14);
-                long minutes=(stats.millis[i]+59_999)/60_000;
-                card.addView(label(TimeOfDayStats.LABELS[i]+" · "+duration(minutes),14,navy,true));gap(card,6);
-                card.addView(new ShareBar(this,(float)stats.millis[i]/total,blue,line),new LinearLayout.LayoutParams(-1,dp(5)));
+            // Include all four R4 buckets, even on weeks with no overnight time.
+            for (int i = 0; i < timing.millis.length; i++) {
+                if (i > 0) gap(content, 8);
+                String name = TimeOfDayStats.LABELS[i].split(" · ", 2)[0];
+                long minutes = (timing.millis[i] + 59_999) / 60_000;
+                barRow(content, name, exactDuration(minutes), (double) timing.millis[i] / total,
+                        i % 2 == 0 ? Ui.STUDY : Ui.GREEN, false);
             }
-            gap(card,16);card.addView(label(stats.sessions+" timed "+(stats.sessions==1?"session":"sessions")+" · minutes rounded up for display",12,muted,false));
+            gap(content, 10);
+            content.addView(caption(count(timing.sessions, "timed session", "timed sessions") + " · active intervals only"));
         }
-        gap(card,12);card.addView(label("Time spent shows when you worked, not how productive you were. Pauses, manual entries and adjusted durations are excluded.",13,muted,false));
-        addCard(card);
+        gap(content, 18);
+        LinearLayout details = panel(Ui.CARD, true);
+        heading(details, "Completion by deadline");
+        if (learning.deadlineTasks > 0) {
+            details.addView(label(learning.onTimeTasks + " of " + learning.deadlineTasks + " on time", 17, Ui.INK, true));
+            gap(details, 6);
+        }
+        details.addView(caption(learning.deadlineTasks == 0 ? "No eligible completed tasks with a deadline yet."
+                : "All history · completed tasks with a deadline saved before work began."));
+        if (learning.untimedRecords > 0) {
+            gap(details, 12);
+            details.addView(caption(count(learning.untimedRecords, "untimed activity", "untimed activities")
+                    + " saved in the last 7 days. These contribute no minutes."));
+        }
+        gap(details, 12);
+        details.addView(caption("Difficulty uses optional ratings from 1 to 5. The difference uses only paired ratings (reported minus expected)."));
+        gap(details, 10);
+        details.addView(caption("Active intervals exclude pauses, manual entries and edited durations. Local time windows start at midnight, 6 am, noon and 6 pm. Displayed minutes round up."));
+        disclosure("About these patterns", details, false);
+        gap(content, 10);
+        content.addView(caption("Time of day describes when you recorded work."));
+    }
+
+    private void addWeek(LinearLayout parent) {
+        LinearLayout week = row();
+        SimpleDateFormat day = new SimpleDateFormat("EEE", Locale.ENGLISH);
+        SimpleDateFormat date = new SimpleDateFormat("EEEE, MMM d", Locale.ENGLISH);
+        for (int i = 0; i < stats.dayStarts.length; i++) {
+            Date stamp = new Date(stats.dayStarts[i]);
+            LinearLayout cell = column();
+            cell.setGravity(Gravity.CENTER);
+            String abbreviated = day.format(stamp);
+            TextView title = label(stackColumns() ? abbreviated.substring(0, 1) : abbreviated,
+                    12, Ui.INK, false);
+            title.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            cell.addView(title);
+            gap(cell, 6);
+            boolean active = stats.dailyMinutes[i] > 0;
+            GradientDrawable dot = new GradientDrawable();
+            dot.setShape(GradientDrawable.OVAL);
+            dot.setColor(active ? Ui.GREEN : Color.TRANSPARENT);
+            dot.setStroke(dp(1), active ? Ui.GREEN : Ui.MUTED);
+            View mark = new View(this);
+            mark.setBackground(dot);
+            cell.addView(mark, new LinearLayout.LayoutParams(dp(15), dp(15)));
+            cell.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
+            cell.setContentDescription(date.format(stamp) + ", " + stats.dailyMinutes[i] + " recorded minutes");
+            week.addView(cell, new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1));
+        }
+        parent.addView(week);
     }
 
     private void logActivity() {
@@ -432,14 +509,19 @@ public class InsightsActivity extends AppCompatActivity {
                     intent.putExtra("sessionToken",UUID.randomUUID().toString());startActivity(intent);
                 }).setNegativeButton("Cancel",null).show();
             }
-            public void onError(Exception e) {new AlertDialog.Builder(InsightsActivity.this).setMessage("Could not load tasks. Please try again.").setPositiveButton("Got it",null).show();}
+            public void onError(Exception e) {
+                if (isFinishing() || isDestroyed()) return;
+                new AlertDialog.Builder(InsightsActivity.this)
+                        .setMessage("Could not load tasks. Please try again.")
+                        .setPositiveButton("Got it", null).show();
+            }
         });
     }
 
     private void showDefinitions() {
-        LinearLayout panel = card(white, false);
+        LinearLayout panel = panel(Ui.CARD, false);
         heading(panel, getString(R.string.insights_definitions));
-        panel.addView(label(getString(R.string.insights_definitions_body), 14, muted, false));
+        panel.addView(label(getString(R.string.insights_definitions_body), 14, Ui.MUTED, false));
         gap(panel, 20);
         ScrollView scroller = new ScrollView(this);
         scroller.addView(panel);
@@ -447,7 +529,7 @@ public class InsightsActivity extends AppCompatActivity {
         panel.addView(action(getString(R.string.insights_close), v -> dialog.dismiss()));
         dialog.show();
         if (dialog.getWindow() != null) {
-            dialog.getWindow().setBackgroundDrawable(shape(white, false));
+            dialog.getWindow().setBackgroundDrawable(shape(Ui.CARD, false));
             int height = getResources().getDisplayMetrics().heightPixels;
             dialog.getWindow().setLayout(Math.min(getResources().getDisplayMetrics().widthPixels - dp(40), dp(440)),
                     (int) (height * .75f));
@@ -462,11 +544,11 @@ public class InsightsActivity extends AppCompatActivity {
     }
 
     private InsightsIcon iconButton(InsightsIcon.Kind kind, int description) {
-        InsightsIcon icon = new InsightsIcon(this, kind, muted);
+        InsightsIcon icon = new InsightsIcon(this, kind, Ui.MUTED);
         icon.setContentDescription(getString(description));
         icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         icon.setFocusable(true);
-        icon.setBackground(new RippleDrawable(ColorStateList.valueOf(ice), null, shape(white, false)));
+        icon.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.MINT), null, shape(Ui.CARD, false)));
         return icon;
     }
 
@@ -475,88 +557,235 @@ public class InsightsActivity extends AppCompatActivity {
         view.setText(text);
         view.setTextSize(size);
         view.setTextColor(color);
-        view.setTypeface(Typeface.create(bold ? "sans-serif-medium" : "sans-serif", Typeface.NORMAL));
+        view.setTypeface(Typeface.DEFAULT, bold ? Typeface.BOLD : Typeface.NORMAL);
         view.setIncludeFontPadding(false);
-        view.setLineSpacing(dp(3), 1f);
+        view.setLineSpacing(dp(2), 1f);
         return view;
     }
 
+    private TextView caption(String text) {
+        return label(text, 13, Ui.MUTED, false);
+    }
+
+    private void heading(LinearLayout parent, String text) {
+        TextView title = label(text, 20, Ui.INK, true);
+        title.setLetterSpacing(-.015f);
+        ViewCompat.setAccessibilityHeading(title, true);
+        parent.addView(title);
+        gap(parent, 6);
+    }
+
+    private void eyebrow(LinearLayout parent, String text) {
+        TextView header = label(text.toUpperCase(Locale.ENGLISH), 12, Ui.GREEN, true);
+        header.setLetterSpacing(.075f);
+        parent.addView(header);
+        gap(parent, 4);
+    }
+
+    private LinearLayout figure(String value, String name, int color, int size) {
+        LinearLayout group = column();
+        TextView number = label(value, size, color, true);
+        number.setLetterSpacing(-.025f);
+        group.addView(number);
+        gap(group, 4);
+        group.addView(label(name, 14, Ui.INK, false));
+        return group;
+    }
+
+    private LinearLayout metric(String value, String name, String detail, int fill, int size) {
+        LinearLayout tile = panel(fill, false);
+        tile.addView(figure(value, name, Ui.INK, size));
+        if (detail != null) {
+            gap(tile, 6);
+            tile.addView(caption(detail));
+        }
+        return tile;
+    }
+
     private TextView action(String text, View.OnClickListener listener) {
-        TextView button = label(text, 14, blue, true);
+        TextView button = label(text, 14, Ui.GREEN, true);
         button.setGravity(Gravity.CENTER);
         button.setMinHeight(dp(48));
-        button.setPadding(dp(12), dp(12), dp(12), dp(12));
-        button.setBackground(new RippleDrawable(ColorStateList.valueOf(ice), shape(white, true), null));
+        button.setPadding(dp(14), dp(10), dp(14), dp(10));
+        button.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.MINT_SOFT), shape(Ui.CARD, true), null));
         button.setOnClickListener(listener);
         button.setFocusable(true);
         return button;
     }
 
-    private LinearLayout card(int color, boolean border) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(20), dp(20), dp(20), dp(20));
-        // App-wide card style: white cards float on the off-white page with a soft shadow, no border.
-        card.setBackground(shape(color, false));
-        if (color == white) card.setElevation(dp(2));
-        return card;
+    private void disclosure(String title, LinearLayout details, boolean forAccuracy) {
+        TextView toggle = action(title, v -> {
+            if (forAccuracy) accuracyExpanded = !accuracyExpanded;
+            else patternsExpanded = !patternsExpanded;
+            setDisclosure((TextView) v, details, forAccuracy ? accuracyExpanded : patternsExpanded);
+        });
+        toggle.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        toggle.setCompoundDrawablePadding(dp(10));
+        setDisclosure(toggle, details, forAccuracy ? accuracyExpanded : patternsExpanded);
+        content.addView(toggle);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
+        params.topMargin = dp(8);
+        content.addView(details, params);
     }
 
-    private GradientDrawable shape(int color, boolean border) {
-        // GradientDrawable is Android's shape drawable; this is a single flat color.
-        GradientDrawable shape = new GradientDrawable();
-        shape.setColor(color);
-        shape.setCornerRadius(dp(22));
-        if (border) shape.setStroke(dp(1), line);
-        return shape;
+    private void setDisclosure(TextView button, LinearLayout details, boolean expanded) {
+        details.setVisibility(expanded ? View.VISIBLE : View.GONE);
+        button.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0,
+                expanded ? R.drawable.insights_chevron_up : R.drawable.insights_chevron, 0);
+        ViewCompat.setStateDescription(button, expanded ? "Expanded" : "Collapsed");
     }
+
+    private GradientDrawable shape(int fill, boolean outline) {
+        GradientDrawable result = Ui.round(fill, dp(14));
+        if (outline) result.setStroke(dp(1), Ui.LINE);
+        return result;
+    }
+
+    private LinearLayout panel(int fill, boolean outline) {
+        LinearLayout group = column();
+        group.setBackground(shape(fill, outline));
+        group.setPadding(dp(16), dp(14), dp(16), dp(14));
+        return group;
+    }
+
+    private LinearLayout column() {
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        return layout;
+    }
+
     private LinearLayout row() {
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        row.setGravity(Gravity.CENTER_VERTICAL);
-        return row;
+        LinearLayout layout = new LinearLayout(this);
+        layout.setOrientation(LinearLayout.HORIZONTAL);
+        layout.setGravity(Gravity.CENTER_VERTICAL);
+        return layout;
     }
-    private void heading(LinearLayout parent, String text) {
-        TextView heading = label(text, 19, navy, true);
-        ViewCompat.setAccessibilityHeading(heading, true);
-        parent.addView(heading);
-        gap(parent, 8);
+
+    private boolean stackColumns() {
+        android.content.res.Configuration config = getResources().getConfiguration();
+        return config.screenWidthDp < 340 || config.fontScale > 1.25f;
     }
-    private void addCard(LinearLayout card) {
-        content.addView(card, new LinearLayout.LayoutParams(-1, -2));
-        gap(content, 16);
+
+    private void pair(LinearLayout parent, View first, View second) {
+        boolean stacked = stackColumns();
+        LinearLayout group = stacked ? column() : row();
+        LinearLayout.LayoutParams left = new LinearLayout.LayoutParams(
+                stacked ? MATCH_PARENT : 0, stacked ? WRAP_CONTENT : MATCH_PARENT, stacked ? 0 : 1);
+        LinearLayout.LayoutParams right = new LinearLayout.LayoutParams(left);
+        if (stacked) right.topMargin = dp(8);
+        else right.setMarginStart(dp(10));
+        group.addView(first, left);
+        group.addView(second, right);
+        parent.addView(group);
     }
+
+    private void lineWithValue(LinearLayout parent, View title, View value) {
+        if (stackColumns()) {
+            parent.addView(title);
+            gap(parent, 3);
+            parent.addView(value);
+        } else {
+            LinearLayout group = row();
+            group.addView(title, new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1));
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(WRAP_CONTENT, WRAP_CONTENT);
+            params.setMarginStart(dp(8));
+            group.addView(value, params);
+            parent.addView(group);
+        }
+    }
+
+    private void titleAndValue(LinearLayout parent, String title, String value) {
+        TextView name = label(title, 20, Ui.INK, true);
+        ViewCompat.setAccessibilityHeading(name, true);
+        lineWithValue(parent, name, label(value, 14, Ui.INK, false));
+    }
+
+    private void barRow(LinearLayout parent, String name, String value, double fraction, int color, boolean category) {
+        LinearLayout key = row();
+        if (category) {
+            GradientDrawable dot = new GradientDrawable();
+            dot.setShape(GradientDrawable.OVAL);
+            dot.setColor(color);
+            View mark = new View(this);
+            mark.setBackground(dot);
+            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(9), dp(9));
+            params.setMarginEnd(dp(6));
+            key.addView(mark, params);
+        }
+        key.addView(label(name, 13, Ui.INK, false));
+        TextView amount = label(value, 13, Ui.INK, false);
+        amount.setGravity(Gravity.END);
+        View bar = new ShareBar(this, (float) fraction, color, Ui.LINE);
+        if (stackColumns()) {
+            parent.addView(key);
+            parent.addView(amount);
+            gap(parent, 5);
+            parent.addView(bar, new LinearLayout.LayoutParams(MATCH_PARENT, dp(5)));
+        } else {
+            LinearLayout group = row();
+            group.addView(key, new LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f));
+            LinearLayout.LayoutParams track = new LinearLayout.LayoutParams(0, dp(6), 1.05f);
+            track.setMarginStart(dp(5));
+            track.setMarginEnd(dp(7));
+            group.addView(bar, track);
+            group.addView(amount, new LinearLayout.LayoutParams(0, WRAP_CONTENT, category ? 1.25f : .72f));
+            parent.addView(group);
+        }
+    }
+
     private void divider(LinearLayout parent) {
-        gap(parent, 20);
-        View divider = new View(this);
-        divider.setBackgroundColor(line);
-        parent.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
-        gap(parent, 20);
+        gap(parent, 11);
+        parent.addView(Ui.divider(this));
+        gap(parent, 11);
     }
-    private void gap(LinearLayout parent, int height) {
-        parent.addView(new View(this), new LinearLayout.LayoutParams(1, dp(height)));
+
+    private void gap(LinearLayout parent, int height) { Ui.space(parent, height); }
+
+    private static String count(int n, String singular, String plural) {
+        return n + " " + (n == 1 ? singular : plural);
     }
+
     private static String duration(long minutes) {
         if (minutes < 60) return minutes + " min";
-        return minutes % 60 == 0 ? (minutes / 60) + " h"
-                : String.format(Locale.ENGLISH, "%.1f h", minutes / 60.0);
+        return minutes % 60 == 0 ? (minutes / 60) + " h" : decimal(minutes / 60.0) + " h";
     }
-    private int dp(int value) { return Math.round(value * getResources().getDisplayMetrics().density); }
+
+    private static String exactDuration(long minutes) {
+        if (minutes < 60 || minutes % 60 == 0) return duration(minutes);
+        return (minutes / 60) + " h " + (minutes % 60) + " m";
+    }
+
+    private static String decimal(double value) {
+        return String.format(Locale.ENGLISH, "%.1f", value);
+    }
+
+    private static String signed(double value) {
+        return Math.abs(value) < .05 ? "0.0" : String.format(Locale.ENGLISH, "%+.1f", value);
+    }
+
+    private int dp(int value) { return Ui.dp(this, value); }
 
     private static final class ShareBar extends View {
         private final android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
         private final float share;
         private final int fill, track;
+
         ShareBar(android.content.Context context, float share, int fill, int track) {
-            super(context); this.share = share; this.fill = fill; this.track = track;
+            super(context);
+            this.share = Math.max(0f, Math.min(share, 1f));
+            this.fill = fill;
+            this.track = track;
+            setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         }
+
         @Override protected void onDraw(android.graphics.Canvas canvas) {
-            super.onDraw(canvas);
             float radius = getHeight() / 2f;
             paint.setColor(track);
             canvas.drawRoundRect(0, 0, getWidth(), getHeight(), radius, radius, paint);
-            paint.setColor(fill);
-            canvas.drawRoundRect(0, 0, getWidth() * share, getHeight(), radius, radius, paint);
+            if (share > 0) {
+                paint.setColor(fill);
+                canvas.drawRoundRect(0, 0, getWidth() * share, getHeight(), radius, radius, paint);
+            }
         }
     }
 }

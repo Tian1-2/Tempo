@@ -22,17 +22,19 @@ public final class CategoryCheck {
             task.setTaskId((int) new TaskDao(helper).insertTask(task));
             check(dao.countTasks("CLUB") == 1 && !dao.delete("Club"), "category in use cannot be removed");
             new TaskDao(helper).archiveTask(task.getTaskId());
-            check(dao.countTasks("Club") == 0 && dao.delete("Club"), "after the task is deleted the category can be removed");
+            check(dao.countTasks("Club") == 1 && !dao.delete("Club"), "an archived task still holds its category (it can be restored)");
+            db.execSQL("UPDATE tasks SET category='Life' WHERE task_id=" + task.getTaskId());
+            check(dao.countTasks("Club") == 0 && dao.delete("Club"), "after the task moves to another category, it can be removed");
 
             db.execSQL("DROP TABLE categories");
             Task legacy = new Task("Old", "Volunteering", 30, 2, 2, 0);
             new TaskDao(helper).insertTask(legacy);
-            helper.onUpgrade(db, 4, 5);
+            helper.onUpgrade(db, 5, 6);
             List<String> names = new ArrayList<>();
             for (Category c : dao.getAll()) names.add(c.getName());
-            check(names.subList(0, 3).equals(Arrays.asList("Study", "Work", "Life")), "V4 upgrade seeds the three defaults first");
-            check(names.contains("Volunteering") && names.contains("Club"), "V4 upgrade adopts categories already used by tasks");
-            helper.onUpgrade(db, 4, 5);
+            check(names.subList(0, 3).equals(Arrays.asList("Study", "Work", "Life")), "upgrade seeds the three defaults first");
+            check(names.contains("Volunteering") && !names.contains("Club"), "upgrade adopts categories used by tasks, not removed ones");
+            helper.onUpgrade(db, 5, 6);
             check(number("SELECT COUNT(*) FROM categories") == names.size(), "category migration is idempotent");
         }
         System.out.println("PASS: " + count + " category assertions on real SQLite.");

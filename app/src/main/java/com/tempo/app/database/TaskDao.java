@@ -22,6 +22,7 @@ public class TaskDao {
     private Task cursorToTask(Cursor cursor) {
         Task task = new Task();
         task.setTaskId(cursor.getInt(cursor.getColumnIndexOrThrow("task_id")));
+        task.setArchived(cursor.getInt(cursor.getColumnIndexOrThrow("archived")) != 0);
         task.setTitle(cursor.getString(cursor.getColumnIndexOrThrow("title")));
         task.setDescription(cursor.getString(cursor.getColumnIndexOrThrow("description")));
         task.setCategory(cursor.getString(cursor.getColumnIndexOrThrow("category")));
@@ -58,10 +59,14 @@ public class TaskDao {
     }
 
     // ---------- READ: all ----------
-    public List<Task> getAllTasks() {
+    public List<Task> getAllTasks() { return listTasks(false); }
+
+    public List<Task> getTasksWithHistory() { return listTasks(true); }
+
+    private List<Task> listTasks(boolean includeArchived) {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
-        try (Cursor cursor = db.query("tasks", null, "status <> ?", new String[]{"DELETED"},
+        try (Cursor cursor = db.query("tasks", null, includeArchived ? null : "archived=0", null,
                 null, null, "deadline ASC")) {
             while (cursor.moveToNext()) {
                 tasks.add(cursorToTask(cursor));
@@ -70,14 +75,19 @@ public class TaskDao {
         return tasks;
     }
 
-    /** Every task including deleted ones, for history views that must still name and colour old records. */
-    public List<Task> getAllTasksIncludingDeleted() {
-        List<Task> list = new ArrayList<>();
-        SQLiteDatabase db = dbHelper.getReadableDatabase();
-        try (Cursor cursor = db.query("tasks", null, null, null, null, null, "task_id ASC")) {
-            while (cursor.moveToNext()) list.add(cursorToTask(cursor));
+    public List<Task> getTasksForManagement(long now) {
+        List<Task> tasks = new ArrayList<>();
+        String sql = "SELECT t.*, EXISTS(SELECT 1 FROM schedule_items s WHERE s.task_id=t.task_id "
+                + "AND s.status='PLANNED' AND s.end_time>?) AS future_slot FROM tasks t "
+                + "ORDER BY t.archived, future_slot, t.title COLLATE NOCASE";
+        try (Cursor c = dbHelper.getReadableDatabase().rawQuery(sql, new String[]{String.valueOf(now)})) {
+            while (c.moveToNext()) {
+                Task t = cursorToTask(c);
+                t.setHasFutureSlot(c.getInt(c.getColumnIndexOrThrow("future_slot")) != 0);
+                tasks.add(t);
+            }
         }
-        return list;
+        return tasks;
     }
 
     // ---------- READ: one ----------
@@ -98,7 +108,7 @@ public class TaskDao {
         List<Task> tasks = new ArrayList<>();
         SQLiteDatabase db = dbHelper.getReadableDatabase();
         try (Cursor cursor = db.query("tasks", null,
-                "status IN (?, ?)", new String[]{"PENDING", "IN_PROGRESS"},
+                "archived=0 AND status IN (?, ?)", new String[]{"PENDING", "IN_PROGRESS"},
                 null, null, "deadline ASC")) {
             while (cursor.moveToNext()) {
                 tasks.add(cursorToTask(cursor));
@@ -123,13 +133,28 @@ public class TaskDao {
         values.put("status", task.getStatus());
         // created_at is intentionally not updated
         return db.update("tasks", values,
-                "task_id = ?", new String[]{String.valueOf(task.getTaskId())});
+                "task_id = ? AND archived=0", new String[]{String.valueOf(task.getTaskId())});
     }
 
     // ---------- DELETE ----------
     public int deleteTask(int taskId) {
         SQLiteDatabase db = dbHelper.getWritableDatabase();
-        return db.delete("tasks", "task_id = ?",
+        String[] id = {String.valueOf(taskId)};
+        db.beginTransaction();
+        try {
+            db.delete("schedule_items", "task_id=?", id);
+            db.delete("task_feedback", "task_id=?", id);
+            int changed = db.delete("tasks", "task_id=?", id);
+            if (changed > 0) new com.tempo.app.learning.LearningStore(dbHelper).refreshPredictions(System.currentTimeMillis());
+            db.setTransactionSuccessful();
+            return changed;
+        } finally { db.endTransaction(); }
+    }
+
+    public int restoreTask(int taskId) {
+        ContentValues values = new ContentValues();
+        values.put("archived", 0);
+        return dbHelper.getWritableDatabase().update("tasks", values, "task_id=? AND archived=1",
                 new String[]{String.valueOf(taskId)});
     }
 
@@ -139,14 +164,24 @@ public class TaskDao {
         db.beginTransaction();
         try {
             ContentValues task = new ContentValues();
-            task.put("status", "DELETED");
-            int changed = db.update("tasks", task, "task_id=? AND status<>?",
-                    new String[]{String.valueOf(taskId), "DELETED"});
+            task.put("archived", 1);
+            int changed = db.update("tasks", task, "task_id=? AND archived=0",
+                    new String[]{String.valueOf(taskId)});
             if (changed > 0) {
                 ContentValues slot = new ContentValues();
                 slot.put("status", "CANCELLED");
-                db.update("schedule_items", slot, "task_id=? AND status='PLANNED'",
-                        new String[]{String.valueOf(taskId)});
+                long now = System.currentTimeMillis();
+                String id = String.valueOf(taskId);
+                db.update("schedule_items", slot, "task_id=? AND status='PLANNED' AND start_time>=?",
+                        new String[]{id, String.valueOf(now)});
+                // Keep elapsed plans for daily review, including the elapsed portion of an open slot.
+                long boundary = Math.floorDiv(now + 59_999L, 60_000L) * 60_000L;
+                ContentValues shortened = new ContentValues();
+                shortened.put("end_time", boundary);
+                db.update("schedule_items", shortened, "task_id=? AND status='PLANNED' AND end_time>?",
+                        new String[]{id, String.valueOf(boundary)});
+                slot.put("status", com.tempo.app.model.ScheduleItem.PAST_PLAN);
+                db.update("schedule_items", slot, "task_id=? AND status='PLANNED'", new String[]{id});
             }
             db.setTransactionSuccessful();
             return changed;

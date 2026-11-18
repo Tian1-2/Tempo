@@ -74,22 +74,15 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         Ui.space(content, 6);
         content.addView(Ui.title(this, "History"));
         Ui.space(content, 4);
-        content.addView(Ui.text(this, "Every focus session and logged activity. Tap one to correct its time or rating.", 14, Ui.MUTED, false));
+        content.addView(Ui.text(this, "Your latest 200 activities. Totals include all saved records.", 14, Ui.MUTED, false));
         Ui.space(content, 18);
     }
 
     private void load() {
         header();
         content.addView(Ui.text(this, "Reading your records…", 14, Ui.MUTED, false));
-        learning.records(new TaskRepository.Callback<List<LearningStore.Record>>() {
-            public void onSuccess(List<LearningStore.Record> rows) {
-                // Categories colour each record; read them once, then render. Deleted tasks are
-                // included so their past records keep the right colour.
-                RepositoryProvider.getTaskRepository().getAllTasksIncludingDeleted(new TaskRepository.Callback<List<Task>>() {
-                    public void onSuccess(List<Task> tasks) { render(rows, tasks); }
-                    public void onError(Exception e) { render(rows, java.util.Collections.<Task>emptyList()); }
-                });
-            }
+        learning.history(new TaskRepository.Callback<LearningStore.History>() {
+            public void onSuccess(LearningStore.History history) { render(history); }
             public void onError(Exception e) {
                 header();
                 LinearLayout panel = Ui.panel(SessionHistoryActivity.this, Ui.WARM_SOFT);
@@ -103,11 +96,10 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         });
     }
 
-    private void render(List<LearningStore.Record> rows, List<Task> tasks) {
+    private void render(LearningStore.History history) {
         if (isFinishing()) return;
         header();
-        Map<Integer, String> category = new HashMap<>();
-        for (Task t : tasks) category.put(t.getTaskId(), t.getCategory());
+        List<LearningStore.Record> rows = history.rows;
         if (rows.isEmpty()) {
             LinearLayout empty = Ui.card(this);
             empty.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -120,7 +112,7 @@ public final class SessionHistoryActivity extends AppCompatActivity {
             empty.addView(body);
             content.addView(empty);
         } else {
-            summary(rows);
+            summary(history);
             Ui.space(content, 22);
             SimpleDateFormat dayKey = new SimpleDateFormat("yyyy-MM-dd", Locale.US);
             String today = dayKey.format(new Date());
@@ -143,7 +135,7 @@ public final class SessionHistoryActivity extends AppCompatActivity {
                     label.setGravity(Gravity.CENTER_VERTICAL);
                     String name = key.equals(today) ? "Today" : key.equals(yesterday) ? "Yesterday" : dayLabel.format(new Date(row.savedAt));
                     label.addView(Ui.eyebrow(this, name), new LinearLayout.LayoutParams(0, -2, 1));
-                    label.addView(Ui.text(this, dayMinutes > 0 ? DailyReview.formatMinutes(dayMinutes) : "", 12, Ui.MUTED, true));
+                    label.addView(Ui.text(this, dayMinutes > 0 ? DailyReview.formatMinutes(dayMinutes) + (history.count > rows.size() && key.equals(dayKey.format(new Date(rows.get(rows.size()-1).savedAt))) ? " shown" : "") : "", 12, Ui.MUTED, true));
                     content.addView(label);
                     Ui.space(content, 8);
                     dayCard = Ui.card(this);
@@ -152,7 +144,7 @@ public final class SessionHistoryActivity extends AppCompatActivity {
                 } else {
                     dayCard.addView(Ui.divider(this));
                 }
-                dayCard.addView(recordRow(row, category.get(row.taskId), clock));
+                dayCard.addView(recordRow(row, row.category, clock));
             }
         }
         Ui.space(content, 24);
@@ -162,19 +154,13 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         restoreEdit = null;
     }
 
-    private void summary(List<LearningStore.Record> rows) {
-        long weekStart = System.currentTimeMillis() - 7L * 86_400_000L;
-        int total = 0, week = 0, done = 0;
-        for (LearningStore.Record r : rows) {
-            if (r.minutes != null) { total += r.minutes; if (r.savedAt >= weekStart) week += r.minutes; }
-            if ("COMPLETED".equals(r.outcome)) done++;
-        }
+    private void summary(LearningStore.History history) {
         LinearLayout card = Ui.card(this);
         card.setOrientation(LinearLayout.HORIZONTAL);
         card.setPadding(dp(8), dp(16), dp(8), dp(16));
-        card.addView(stat(String.valueOf(rows.size()), rows.size() == 1 ? "record" : "records"), new LinearLayout.LayoutParams(0, -2, 1));
-        card.addView(stat(DailyReview.formatMinutes(week), "last 7 days"), new LinearLayout.LayoutParams(0, -2, 1));
-        card.addView(stat(String.valueOf(done), done == 1 ? "task finished" : "tasks finished"), new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(stat(String.valueOf(history.count), history.count == 1 ? "record" : "records"), new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(stat(DailyReview.formatMinutes(history.weekMinutes), "last 7 days"), new LinearLayout.LayoutParams(0, -2, 1));
+        card.addView(stat(String.valueOf(history.finished), history.finished == 1 ? "task finished" : "tasks finished"), new LinearLayout.LayoutParams(0, -2, 1));
         content.addView(card);
     }
 
@@ -249,7 +235,7 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         ArrayAdapter<String> adapter=new ArrayAdapter<>(this,android.R.layout.simple_spinner_item,new String[]{"Not rated","1 · Very easy","2 · Easy","3 · Moderate","4 · Hard","5 · Very hard"});
         adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item);rating.setAdapter(adapter);rating.setSelection(Math.max(0,Math.min(5,row.difficulty)));
         form.addView(rating,new LinearLayout.LayoutParams(-1,dp(52)));gap(form,12);
-        form.addView(text("This corrects the saved record. Task status and the original prediction stay the same. Updated estimates apply when you next regenerate the schedule.",13,muted,false));
+        form.addView(text("This corrects the saved record. Task status and the original prediction stay the same. Tempo will update your schedule after saving.",13,muted,false));
         TextView error=text("",13,blue,false);form.addView(error);
         ScrollView scroll=new ScrollView(this);scroll.addView(form);
         AlertDialog dialog=new AlertDialog.Builder(this).setTitle("Correct activity").setView(scroll).setNegativeButton("Cancel",null).setPositiveButton("Save correction",null).create();
@@ -263,7 +249,15 @@ public final class SessionHistoryActivity extends AppCompatActivity {
             catch(NumberFormatException e){error.setText("Enter 1–1440 minutes, or choose Time not recorded.");return;}
             saving=true;dialog.setCancelable(false);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(false);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(false);
             learning.correct(row.id,row.revision,value,rating.getSelectedItemPosition(),new TaskRepository.Callback<Void>() {
-                public void onSuccess(Void ignored){saving=false;dialog.dismiss();Toast.makeText(SessionHistoryActivity.this,"Record updated",Toast.LENGTH_SHORT).show();load();}
+                public void onSuccess(Void ignored){saving=false;dialog.dismiss();load();
+                    com.tempo.app.scheduler.AutoScheduler.replan(SessionHistoryActivity.this, new com.tempo.app.scheduler.AutoScheduler.Listener() {
+                        public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) {
+                            Toast.makeText(SessionHistoryActivity.this, "Record updated", Toast.LENGTH_SHORT).show();
+                        }
+                        public void onFailed(String reason) {
+                            Toast.makeText(SessionHistoryActivity.this, "Record saved. Schedule unchanged. " + reason, Toast.LENGTH_LONG).show();
+                        }
+                    });}
                 public void onError(Exception e){saving=false;dialog.setCancelable(true);dialog.getButton(AlertDialog.BUTTON_POSITIVE).setEnabled(true);dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setEnabled(true);error.setText(e.getMessage());}
             });
         }));dialog.show();

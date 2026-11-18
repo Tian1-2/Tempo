@@ -127,22 +127,63 @@ public class ScheduleDao {
         return list;
     }
 
-    /** Move one planned session, rejecting overlaps with any other saved session that day. */
+    /** A retry may update remaining work only if the same amounts are still current. */
+    public static final class RemainingConflict extends IllegalArgumentException {
+        public final int remaining;
+        public final int required;
+        public RemainingConflict(int remaining, int required) {
+            super("This task has " + remaining + " min remaining. Its locked slots would reserve "
+                    + required + " min across the schedule.");
+            this.remaining = remaining;
+            this.required = required;
+        }
+    }
+
+    /** Move a slot and optionally confirm a corresponding increase in remaining work atomically. */
     public int updatePlannedTime(int scheduleId, String date, long start, long end) {
+        return updatePlannedTime(scheduleId, date, start, end, null);
+    }
+
+    public int updatePlannedTime(int scheduleId, String date, long start, long end, RemainingConflict confirmation) {
         if (scheduleId <= 0 || date == null || start >= end || start % 60_000L != 0 || end % 60_000L != 0) {
             throw new IllegalArgumentException("Invalid schedule time");
         }
         SQLiteDatabase db = dbHelper.getWritableDatabase();
         db.beginTransaction();
-        try (Cursor current = db.query("schedule_items", new String[]{"schedule_id"},
+        try (Cursor current = db.query("schedule_items", null,
                 "schedule_id = ? AND scheduled_date = ? AND status = ?",
                 new String[]{String.valueOf(scheduleId), date, "PLANNED"}, null, null, null);
              Cursor conflict = db.query("schedule_items", new String[]{"schedule_id"},
                 "scheduled_date = ? AND schedule_id <> ? AND status <> 'CANCELLED' AND start_time < ? AND end_time > ?",
                 new String[]{date, String.valueOf(scheduleId), String.valueOf(end), String.valueOf(start)},
                 null, null, null)) {
+            com.tempo.app.model.UserProfile routine = new UserProfileDao(dbHelper).getProfile();
+            if (routine != null) {
+                for (com.tempo.app.scheduler.ScheduleGenerator.Interval block :
+                        com.tempo.app.scheduler.FixedBlocks.intervals(routine.getFixedBlocks(), start)) {
+                    if (start < block.end && block.start < end)
+                        throw new IllegalArgumentException("This time overlaps a fixed weekly commitment.");
+                }
+            }
             if (!current.moveToFirst()) throw new IllegalArgumentException("Planned session not found");
             if (conflict.moveToFirst()) throw new IllegalArgumentException("Time overlaps another session");
+            ScheduleItem edited = cursorToItem(current);
+            int taskId = edited.getTaskId();
+            com.tempo.app.model.Task task = new TaskDao(dbHelper).getTaskById(taskId);
+            if (task == null || task.isArchived() || "COMPLETED".equals(task.getStatus()))
+                throw new IllegalArgumentException("This task is no longer available for planning.");
+            if (task.getDeadline() > 0 && end > task.getDeadline())
+                throw new IllegalArgumentException("The end time cannot be after the task deadline.");
+            long now = System.currentTimeMillis();
+            int required = com.tempo.app.planning.ScheduleEditRules.lockedMinutes(
+                    getScheduleByTaskId(taskId), edited, start, end, now);
+            com.tempo.app.learning.LearningStore learning = new com.tempo.app.learning.LearningStore(dbHelper);
+            int remaining = learning.editContext(taskId).remaining;
+            if (required > remaining) {
+                if (confirmation == null || confirmation.remaining != remaining || confirmation.required != required)
+                    throw new RemainingConflict(remaining, required);
+                learning.setPlanningRemaining(taskId, required, now);
+            }
             ContentValues values = new ContentValues();
             values.put("start_time", start);
             values.put("end_time", end);

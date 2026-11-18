@@ -3,7 +3,6 @@ package com.tempo.app.repository;
 import android.content.Context;
 
 import com.tempo.app.database.AppDatabaseHelper;
-import com.tempo.app.database.FixedEventDao;
 import com.tempo.app.database.ScheduleDao;
 import com.tempo.app.database.TaskDao;
 import com.tempo.app.database.TaskFeedbackDao;
@@ -36,7 +35,6 @@ public class RepositoryProvider {
     public static com.tempo.app.database.CategoryDao getCategoryDao() { return new com.tempo.app.database.CategoryDao(helper); }
 
     /** Weekly classes and meetings; DAO calls must run off the UI thread. */
-    public static FixedEventDao getFixedEventDao() { return new FixedEventDao(helper); }
 
     public static UserProfileRepository getUserProfileRepository() {
         return new UserProfileRepository(new UserProfileDao(helper));

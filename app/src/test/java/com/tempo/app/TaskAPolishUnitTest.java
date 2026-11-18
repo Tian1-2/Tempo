@@ -1,12 +1,12 @@
 package com.tempo.app;
 
 import com.tempo.app.home.DailyReview;
-import com.tempo.app.model.FixedEvent;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.model.TaskFeedback;
 import com.tempo.app.model.UserProfile;
 import com.tempo.app.scheduler.DefaultScheduleConstraints;
+import com.tempo.app.scheduler.FixedBlocks;
 import com.tempo.app.scheduler.ScheduleConstraintsProvider.DayConstraints;
 import com.tempo.app.scheduler.ScheduleGenerator;
 import com.tempo.app.scheduler.ScheduleGenerator.Interval;
@@ -22,7 +22,7 @@ import java.util.List;
 
 import static org.junit.Assert.*;
 
-/** Fixed schedule, stable re-planning and deleted-task review (task-a polish). */
+/** Fixed schedule, stable re-planning, no fragment slots and category colours (task-a polish). */
 public class TaskAPolishUnitTest {
     private static final long M = 60_000L;
     private static final long DAY = 24 * 60 * M;
@@ -51,38 +51,27 @@ public class TaskAPolishUnitTest {
         return s;
     }
 
-    // ---------- fixed schedule ----------
+    // ---------- fixed schedule (stored in the profile as FixedBlocks text) ----------
 
-    @Test public void fixedEventBlocksOnlyItsWeekday() {
+    @Test public void fixedBlockBlocksOnlyItsWeekday() {
         long mon = monday();
-        List<FixedEvent> events = Arrays.asList(
-                new FixedEvent("Lecture", 1, 14 * 60, 16 * 60),
-                new FixedEvent("Tutorial", 2, 10 * 60, 11 * 60));
-        DayConstraints c = DefaultScheduleConstraints.build(mon, mon + DAY, profile(),
-                Collections.<ScheduleItem>emptyList(), events);
+        UserProfile p = profile();
+        p.setFixedBlocks("Mon 14:00-16:00\tLecture\nTue 10:00-11:00\tTutorial");
+        DayConstraints c = DefaultScheduleConstraints.build(mon, mon + DAY, p, Collections.<ScheduleItem>emptyList());
         assertEquals("3 meals + Monday lecture", 4, c.fixedBusyIntervals.size());
         assertTrue(contains(c.fixedBusyIntervals, mon + 14 * 60 * M, mon + 16 * 60 * M));
 
         long tue = mon + DAY;
-        List<Interval> tuesday = DefaultScheduleConstraints.fixedIntervals(tue, tue + DAY, events);
+        List<Interval> tuesday = FixedBlocks.intervals(p.getFixedBlocks(), tue);
         assertEquals(1, tuesday.size());
         assertEquals(tue + 10 * 60 * M, tuesday.get(0).start);
     }
 
-    @Test public void fixedEventOverlappingManualSlotIsSkipped() {
-        long mon = monday();
-        ScheduleItem lock = item(1, mon + 15 * 60 * M, mon + 15 * 60 * M + 30 * M, true, "PLANNED");
-        DayConstraints c = DefaultScheduleConstraints.build(mon, mon + DAY, profile(),
-                Collections.singletonList(lock), Collections.singletonList(new FixedEvent("Lecture", 1, 14 * 60, 16 * 60)));
-        assertFalse(contains(c.fixedBusyIntervals, mon + 14 * 60 * M, mon + 16 * 60 * M));
-    }
-
-    @Test public void plannerAvoidsFixedEvent() {
+    @Test public void plannerAvoidsFixedBlock() {
         long mon = monday();
         Task task = new Task("Report", "Work", 120, 3, 3, 0);
         task.setTaskId(5);
-        List<Interval> busy = DefaultScheduleConstraints.fixedIntervals(mon, mon + DAY,
-                Collections.singletonList(new FixedEvent("Lecture", 1, 9 * 60, 12 * 60)));
+        List<Interval> busy = FixedBlocks.intervals("Mon 09:00-12:00\tLecture", mon);
         ScheduleGenerator.Result r = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
                 new Interval(mon, mon + DAY), mon + 9 * 60 * M,
                 ScheduleModelAdapter.pendingTasks(Collections.singletonList(task)),
@@ -93,16 +82,6 @@ public class TaskAPolishUnitTest {
         for (ScheduleGenerator.Session s : r.sessions) {
             assertTrue("no session inside the lecture", s.interval.start >= mon + 12 * 60 * M);
         }
-    }
-
-    @Test public void fixedEventValidation() {
-        assertNull(FixedEvent.validate("Lecture", 2, 14 * 60, 16 * 60));
-        assertNotNull(FixedEvent.validate(" ", 2, 14 * 60, 16 * 60));
-        assertNotNull(FixedEvent.validate("Lecture", 8, 14 * 60, 16 * 60));
-        assertNotNull(FixedEvent.validate("Lecture", 2, 16 * 60, 14 * 60));
-        assertNull(FixedEvent.validate("Late lab", 5, 22 * 60, 24 * 60));
-        assertEquals(1, FixedEvent.isoDayOfWeek(monday()));
-        assertEquals(7, FixedEvent.isoDayOfWeek(monday() - DAY + 3600_000L));
     }
 
     // ---------- stable re-planning ----------
@@ -185,7 +164,7 @@ public class TaskAPolishUnitTest {
         assertEquals(10, r.unscheduledTasks.get(0).remainingMinutes);
     }
 
-    @Test public void shortTailIsAbsorbedAndRoundingCrumbIsDropped() {
+    @Test public void shortTailIsSplitEvenlyAndRoundingCrumbIsDropped() {
         long mon = monday();
         Task t = new Task("Report", "Work", 27, 3, 3, 0);
         t.setTaskId(6);
@@ -195,7 +174,12 @@ public class TaskAPolishUnitTest {
                 Collections.singletonList(new Interval(mon + 9 * 60 * M, mon + 18 * 60 * M)),
                 Collections.<Interval>emptyList(), Collections.<ScheduleGenerator.Session>emptyList(),
                 Collections.<Interval>emptyList(), 25, 5, 240));
-        assertEquals("27 minutes is one block, not 25 + 2", 1, r.sessions.size());
+        // The 25-minute focus cap holds, and there is no 2-minute crumb: 27 = 14 + 13.
+        assertEquals(2, r.sessions.size());
+        for (ScheduleGenerator.Session s : r.sessions) {
+            long len = (s.interval.end - s.interval.start) / M;
+            assertTrue("piece of " + len + " min", len >= 10 && len <= 25);
+        }
 
         // 49 minutes needed, 47 already planned on another day: the 2-minute rest is not a new slot.
         java.util.Map<Long, Integer> elsewhere = java.util.Collections.singletonMap(6L, 47);
@@ -203,6 +187,21 @@ public class TaskAPolishUnitTest {
                 Collections.singletonList(new ScheduleGenerator.Task(6, 49, null, 3, 3)),
                 elsewhere, java.util.Collections.<Long, Integer>emptyMap());
         assertTrue(left.isEmpty());
+    }
+
+    @Test public void almostUsedDailyLimitDoesNotCreateACrumb() {
+        long mon = monday();
+        Task t = new Task("Slides", "Study", 30, 3, 3, 0);
+        t.setTaskId(7);
+        // Only 2 minutes of the daily limit are left: plan nothing today rather than a 2-minute slot.
+        ScheduleGenerator.Result r = new ScheduleGenerator().generate(new ScheduleGenerator.Request(
+                new Interval(mon, mon + DAY), mon + 9 * 60 * M,
+                ScheduleModelAdapter.pendingTasks(Collections.singletonList(t)),
+                Collections.singletonList(new Interval(mon + 9 * 60 * M, mon + 18 * 60 * M)),
+                Collections.<Interval>emptyList(), Collections.<ScheduleGenerator.Session>emptyList(),
+                Collections.<Interval>emptyList(), 25, 5, 2));
+        assertTrue(r.sessions.isEmpty());
+        assertEquals(30, r.unscheduledTasks.get(0).remainingMinutes);
     }
 
     // ---------- categories ----------
@@ -221,31 +220,6 @@ public class TaskAPolishUnitTest {
         assertNotNull(com.tempo.app.model.Category.validateName("A name that is far too long"));
         assertEquals("Club", com.tempo.app.ui.Categories.name("club"));
         assertEquals("Study", com.tempo.app.ui.Categories.name("study"));
-    }
-
-    // ---------- deleted tasks in the daily review ----------
-
-    @Test public void deletedTaskIsNotCountedAsUnfinished() {
-        long day = monday();
-        Task done = new Task("Essay", "Study", 60, 3, 3, 0);
-        done.setTaskId(1); done.setStatus("COMPLETED");
-        // Task 2 was worked on yesterday and then deleted: the visible list no longer contains it.
-        List<Task> visible = Collections.singletonList(done);
-        List<ScheduleItem> slots = Arrays.asList(
-                item(1, day + 9 * 60 * M, day + 10 * 60 * M, false, "COMPLETED"),
-                item(2, day + 11 * 60 * M, day + 12 * 60 * M, false, "COMPLETED"));
-        TaskFeedback fb = new TaskFeedback();
-        fb.setTaskId(2); fb.setActualDuration(60); fb.setCompletedAt(day + 12 * 60 * M);
-        DailyReview r = DailyReview.compute(day, day + DAY, slots, visible, new ArrayList<>(Collections.singletonList(fb)));
-        assertEquals(1, r.plannedTasks);
-        assertEquals(1, r.completedTasks);
-        assertEquals(60, r.plannedMinutes);
-        assertEquals("focus time on the deleted task still counts", 60, r.focusMinutes);
-
-        Task deleted = new Task("Old", "Life", 60, 3, 3, 0);
-        deleted.setTaskId(2); deleted.setStatus("DELETED");
-        DailyReview withDeleted = DailyReview.compute(day, day + DAY, slots, Arrays.asList(done, deleted), null);
-        assertEquals(1, withDeleted.plannedTasks);
     }
 
     private static boolean contains(List<Interval> list, long start, long end) {

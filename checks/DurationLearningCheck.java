@@ -45,8 +45,7 @@ public final class DurationLearningCheck {
                 Arrays.asList(new ScheduleGenerator.Interval(7*60*M,23*60*M)),Collections.emptyList(),
                 Collections.emptyList(),Collections.emptyList(),25,5,240));
         long total=0;for(ScheduleGenerator.Session s:result.sessions)total+=(s.interval.end-s.interval.start)/M;
-        // A tail under 10 minutes is absorbed into the focus block (task-a rule): 31 = one block, not 25 + 6.
-        check(total==31 && result.sessions.size()==1,"31 remaining minutes scheduled as one block");
+        check(total==31 && result.sessions.size()==2,"31 remaining minutes scheduled across two blocks");
         check(task.getPredictedDuration()==38,"persisted task prediction remains a total");
         task.setStatus("COMPLETED");
         check(ScheduleModelAdapter.pendingTasks(Arrays.asList(task),remainder).isEmpty(),"completed task excluded");

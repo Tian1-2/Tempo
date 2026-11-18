@@ -128,6 +128,8 @@ public final class ScheduleGenerator {
 
     /** Shortest piece of work worth placing in a gap; shorter gaps are left free. */
     public static final int MIN_SESSION_MINUTES = 10;
+    /** Shorter pieces are never planned, even when the daily limit leaves only that much. */
+    public static final int MIN_CRUMB_MINUTES = 5;
 
     public Result generate(Request request) {
         if (request == null) throw new IllegalArgumentException("Request is null");
@@ -156,11 +158,13 @@ public final class ScheduleGenerator {
                     : Math.min(request.day.end, Math.floorDiv(task.deadlineMillis, MINUTE) * MINUTE);
             // Prefer one continuous task block, with its focus breaks inside it. A short
             // opening before a longer free window must not fragment the task unnecessarily.
-            if (remaining > 0 && remaining <= request.maxTaskMinutes - used) {
-                int breaks = (remaining - 1) / request.focusMinutes;
-                long blockMinutes = (long) remaining + (long) breaks * request.breakMinutes;
+            Interval wholeBlock = null;
+            int workToday = Math.min(remaining, request.maxTaskMinutes - used);
+            if (workToday > 0) {
+                int breaks = (workToday - 1) / request.focusMinutes;
+                long blockMinutes = (long) workToday + (long) breaks * request.breakMinutes;
                 List<Interval> free = freeWindows(request, sessions, task.id, cursor, deadline);
-                Interval wholeBlock = chooseWindowAtLeast(free, request.productiveWindows,
+                wholeBlock = chooseWindowAtLeast(free, request.productiveWindows,
                         task.difficulty, blockMinutes);
                 if (wholeBlock != null) cursor = wholeBlock.start;
             }
@@ -170,11 +174,17 @@ public final class ScheduleGenerator {
                 // MIN_SESSION_MINUTES long, unless that is all the task still needs.
                 final int shortest = Math.min(remaining, Math.min(MIN_SESSION_MINUTES, request.focusMinutes));
                 free.removeIf(w -> minutes(w) < shortest);
-                Interval chosen = chooseWindow(free, request.productiveWindows, task.difficulty);
+                Interval chosen = free.isEmpty() ? null : free.get(0);
+                if (wholeBlock != null && cursor < wholeBlock.end) {
+                    chosen = new Interval(cursor, wholeBlock.end);
+                }
                 if (chosen == null) break;
                 int minPieceHere = Math.min(MIN_SESSION_MINUTES, request.focusMinutes);
-                // A focus block may stretch a little to swallow a short tail (26 min = one block, not 25 + 1).
-                int focusCap = remaining - request.focusMinutes < minPieceHere ? remaining : request.focusMinutes;
+                // The focus length is a hard cap. When a full block would leave a crumb (34 min with a
+                // 25-min focus = 25 + 9), split the last two pieces evenly instead (17 + 17).
+                int focusCap = request.focusMinutes;
+                int tail = remaining - request.focusMinutes;
+                if (tail > 0 && tail < minPieceHere && remaining >= 2 * minPieceHere) focusCap = (remaining + 1) / 2;
                 int length = Math.min(Math.min(remaining, focusCap),
                         Math.min(request.maxTaskMinutes - used, minutes(chosen)));
                 if (length <= 0) break;
@@ -186,6 +196,9 @@ public final class ScheduleGenerator {
                         && remaining - minPiece >= minPiece) {
                     length = remaining - minPiece;
                 }
+                // Never place a crumb because the daily limit is almost used up: a 2-minute slot is
+                // no use, so the rest continues on a later day. (5 minutes or more is still placed.)
+                if (length < MIN_CRUMB_MINUTES && length < remaining) break;
                 Interval interval = new Interval(chosen.start, chosen.start + length * MINUTE);
                 sessions.add(new Session(task.id, interval, false));
                 remaining -= length;
@@ -250,20 +263,6 @@ public final class ScheduleGenerator {
             if (cut.end < w.end) out.add(new Interval(cut.end, w.end));
         }
         return out;
-    }
-
-    private static Interval chooseWindow(List<Interval> free, List<Interval> productive, int difficulty) {
-        if (free.isEmpty()) return null;
-        // Difficult tasks try the first productive window; other tasks use the earliest free time.
-        if (difficulty >= 4) {
-            Interval best = null;
-            for (Interval f : free) for (Interval p : productive) {
-                long start = Math.max(f.start, p.start), end = Math.min(f.end, p.end);
-                if (start < end && (best == null || start < best.start)) best = new Interval(start, end);
-            }
-            if (best != null) return best;
-        }
-        return free.get(0);
     }
 
     private static Interval chooseWindowAtLeast(List<Interval> free, List<Interval> productive,

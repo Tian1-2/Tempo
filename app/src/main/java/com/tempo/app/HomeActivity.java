@@ -22,6 +22,8 @@ import androidx.core.view.WindowInsetsCompat;
 
 import com.tempo.app.home.DailyReview;
 import com.tempo.app.home.MorningReview;
+import com.tempo.app.database.AppDatabaseHelper;
+import com.tempo.app.learning.LearningStore;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.model.TaskFeedback;
@@ -208,7 +210,7 @@ public class HomeActivity extends AppCompatActivity {
     /** Runs on the loader thread. */
     private JSONObject buildJson(long now, boolean greet) throws JSONException {
         UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
-        List<Task> tasks = RepositoryProvider.getTaskRepository().getAllTasksSync();
+        List<Task> tasks = RepositoryProvider.getTaskRepository().getTasksWithHistorySync();
         List<TaskFeedback> feedback = RepositoryProvider.getTaskRepository().getAllFeedbackSync();
         long todayStart = startOfDay(now);
         long yesterdayStart = addDays(todayStart, -1);
@@ -216,7 +218,12 @@ public class HomeActivity extends AppCompatActivity {
         List<ScheduleItem> todaySlots = RepositoryProvider.getScheduleRepository().getScheduleByDateSync(dateKey(todayStart));
         List<ScheduleItem> yesterdaySlots = RepositoryProvider.getScheduleRepository().getScheduleByDateSync(dateKey(yesterdayStart));
         DailyReview today = DailyReview.compute(todayStart, tomorrowStart, todaySlots, tasks, feedback);
-        DailyReview yesterday = DailyReview.compute(yesterdayStart, todayStart, yesterdaySlots, tasks, feedback);
+        Map<Integer, Integer> originalEstimates;
+        try (AppDatabaseHelper helper = new AppDatabaseHelper(this)) {
+            originalEstimates = new LearningStore(helper).reviewEstimates(now);
+        }
+        DailyReview yesterday = DailyReview.compute(yesterdayStart, todayStart, yesterdaySlots, tasks, feedback,
+                originalEstimates);
         List<Row> rows = buildRows(todaySlots, tasks, now);
 
         JSONObject d = new JSONObject();
@@ -231,8 +238,8 @@ public class HomeActivity extends AppCompatActivity {
                 && profile.getSleepTime() != null && profile.getFocusDuration() > 0);
 
         JSONObject t = new JSONObject();
-        t.put("planned", today.plannedTasks);
-        t.put("completed", today.completedTasks);
+        t.put("planned", today.tasksToGo + today.finishedOnDay);
+        t.put("completed", today.finishedOnDay);
         t.put("focusText", DailyReview.formatMinutes(today.focusMinutes));
         t.put("plannedText", DailyReview.formatMinutes(today.plannedMinutes));
         d.put("today", t);
@@ -304,7 +311,8 @@ public class HomeActivity extends AppCompatActivity {
         List<Row> rows = new ArrayList<>();
         if (slots != null) for (ScheduleItem item : slots) {
             Task task = byId.get(item.getTaskId());
-            if (task == null) continue;
+            if (task == null || task.isArchived() || "CANCELLED".equals(item.getStatus())
+                    || ScheduleItem.PAST_PLAN.equals(item.getStatus())) continue;
             Row row = byTask.get(task.getTaskId());
             if (row == null) {
                 row = new Row();

@@ -52,38 +52,40 @@ future plans use realistic durations.
 **Architecture**
 
 - *Screens* (Activities): Home (HTML page in a WebView), Schedule timeline, Add/Edit task, Profile,
-  Fixed schedule, Categories, Focus timer, Session review, Insights, History.
+  Categories, Focus timer, Session review, Insights, History.
 - *Planning engine* (pure Java, unit-tested without Android): `ScheduleGenerator` places work into free
   windows (wake–sleep minus meals, fixed events and existing slots), prefers one continuous block per
   task, puts hard tasks into the productive window, and honours deadlines and the daily limit.
   `ScheduleService` runs it over a rolling 7-day window; `AutoScheduler` triggers it in the background.
 - *Learning* (`LearningStore`, `DurationLearning`): every timed session records actual minutes; future
   tasks of the same category/type get a predicted duration from the user's past over- or under-runs.
-- *Data*: SQLite tables for tasks, schedule items, profile, feedback, learning snapshots, fixed events
-  and categories, accessed through DAOs and repositories; migrations keep old data on upgrade.
+- *Data*: SQLite tables for tasks, schedule items, profile (including weekly commitments), feedback,
+  learning snapshots and categories, accessed through DAOs and repositories; migrations keep old data on upgrade.
 - *Reminders*: one exact alarm for the next planned slot, re-armed after every re-plan and after reboot.
 
 ## 4. Features
 
 1. **Routine profile** — wake/sleep, meals, best focus time, focus/break length, daily task hours.
-2. **Fixed schedule** — weekly classes and meetings that the planner never overlaps.
-3. **Automatic 7-day planning** — on every change (task saved or deleted, profile or fixed schedule
+2. **Fixed schedule** — named weekly classes and meetings, edited in Profile, that the planner never overlaps.
+3. **Automatic 7-day planning** — on every change (task saved or archived, profile or fixed schedule
    edited, focus session ended); tasks that do not fit today continue on later days.
 4. **Schedule timeline** — colour-coded by category, with breaks and fixed events; move a slot with
-   time wheels (it stays locked) or delete a task (history is kept).
+   time wheels (it stays locked) or archive a task (history is kept; it can be restored).
 5. **Custom categories and colours** — Study / Work / Life plus the user's own.
 6. **Focus timer and session review** — pause/resume, record minutes, difficulty and progress.
-7. **Learning and Insights** — predicted durations, remaining work, 7-day chart, estimate error
-   (MAE / bias), editable activity history.
-8. **Daily review** — yesterday's score from completion, focus time and estimate accuracy.
+7. **Learning and Insights** — Overview / Estimates / Patterns tabs: predicted durations, remaining
+   work, 7-day chart, estimate error (MAE), time-of-day patterns, editable activity history.
+8. **Morning review** — between 07:00 and 09:00, yesterday's score from completion, recorded time and
+   estimate accuracy.
 9. **Reminders** — notification before each task; tap to start focusing.
 
 **TODO:** add 3–4 screenshots (Home, Schedule, Insights, Add task) with one-line captions.
 
 ## 5. Testing
 
-- 30 JUnit tests for the planner, constraints, daily review, categories and fixed schedule.
-- `checks/run_checks.py`: about 270 assertions that run the production database code against real SQLite.
+- 30 JUnit tests for the planner, constraints, daily review, morning review, categories and fixed schedule.
+- `checks/run_checks.py`: 14 suites, about 390 assertions, running the production database and planning
+  code against real SQLite (including upgrades from every earlier database version).
 - Manual runs on the Android emulator (Android 16): upgrade from older databases, reminders firing on
   time, and planning around fixed events.
 

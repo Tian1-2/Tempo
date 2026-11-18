@@ -23,7 +23,6 @@ import android.text.InputType;
 
 import androidx.appcompat.app.AppCompatActivity;
 
-import com.tempo.app.model.FixedEvent;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.repository.RepositoryProvider;
@@ -33,6 +32,9 @@ import com.tempo.app.scheduler.ScheduleDisplayBlocks;
 import com.tempo.app.scheduler.ScheduleGenerator;
 import com.tempo.app.planning.ScheduleEditRules;
 import com.tempo.app.ui.TimelineScale;
+import com.tempo.app.ui.Ui;
+import com.tempo.app.scheduler.FixedBlocks;
+import com.tempo.app.database.ScheduleDao;
 
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -58,7 +60,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private final List<ScheduleItem> schedule = new ArrayList<>();
     private boolean includeBreaks = true;
     private long selectedDayMillis;
-    private final List<FixedEvent> fixedEvents = new ArrayList<>();
+    private String planError;
+    private com.tempo.app.model.UserProfile routine;
     private int focusBreakMinutes = 15;
     private LinearLayout content;
     private LinearLayout timelineBody;
@@ -99,10 +102,13 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 // slots and only re-place missed ones (see AutoScheduler.refresh).
                 AutoScheduler.refresh(this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(ScheduleGenerator.Result result) {
-                        if (!isFinishing() && !isDestroyed()) loadData();
+                        if (!isFinishing() && !isDestroyed()) { planError = null; loadData(); }
                     }
                     @Override public void onFailed(String error) {
-                        // Existing data remains visible; task and profile save flows show errors.
+                        if (!isFinishing() && !isDestroyed() && !AutoScheduler.NO_PROFILE.equals(error)
+                                && !AutoScheduler.TIMER_ACTIVE.equals(error)) {
+                            planError = error; render();
+                        }
                     }
                 });
             }
@@ -121,26 +127,18 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private void loadData() {
         final long requestedDay = selectedDayMillis;
         final long request = ++loadSequence;
-        new Thread(() -> {
-            List<FixedEvent> events;
-            try { events = RepositoryProvider.getFixedEventDao().getAll(); }
-            catch (RuntimeException e) { events = Collections.emptyList(); }
-            final List<FixedEvent> loaded = events;
-            runOnUiThread(() -> {
-                if (request != loadSequence || isFinishing() || isDestroyed()) return;
-                fixedEvents.clear(); fixedEvents.addAll(loaded); render();
-            });
-        }, "fixed-events").start();
         RepositoryProvider.getUserProfileRepository().getProfile(new TaskRepository.Callback<com.tempo.app.model.UserProfile>() {
             @Override public void onSuccess(com.tempo.app.model.UserProfile profile) {
                 if (profile != null && requestedDay == selectedDayMillis && request == loadSequence
                         && !isFinishing() && !isDestroyed()) {
+                    routine = profile;
                     focusBreakMinutes = Math.max(0, profile.getBreakDuration()); render();
                 }
             }
             @Override public void onError(Exception error) { }
         });
-        RepositoryProvider.getTaskRepository().getAllTasks(new TaskRepository.Callback<List<Task>>() {
+        boolean pastDay = requestedDay < startOfDay(System.currentTimeMillis());
+        RepositoryProvider.getTaskRepository().getAllTasks(pastDay, new TaskRepository.Callback<List<Task>>() {
             @Override public void onSuccess(List<Task> result) {
                 if (requestedDay != selectedDayMillis || request != loadSequence || isFinishing() || isDestroyed()) return;
                 tasks.clear();
@@ -196,7 +194,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         LinearLayout row = new LinearLayout(this);
         row.setGravity(Gravity.CENTER_VERTICAL);
         row.setPadding(dp(22), 0, dp(22), 0);
-        TextView dayLabel = label(selectedDayMillis == startOfDay(System.currentTimeMillis()) ? "Today's tasks" : "Tasks this day",
+        TextView dayLabel = label("Scheduled tasks",
                 16, INK, true);
         row.addView(dayLabel);
         TextView summary = label("0/0", 16, Color.rgb(52, 126, 91), true);
@@ -211,8 +209,44 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         row.addView(toggle);
         content.addView(row);
         spacer(8);
-        spacer(8);
+        String weekly = routine == null ? "" : routine.getFixedBlocks();
+        List<FixedBlocks.Entry> fixed = FixedBlocks.onDay(weekly, selectedDayMillis);
+        List<ScheduleGenerator.Interval> busy = FixedBlocks.intervals(weekly, selectedDayMillis);
 
+        Button manage = new Button(this);
+        manage.setText("Manage tasks");
+        manage.setAllCaps(false);
+        manage.setTextSize(15);
+        manage.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
+        manage.setTextColor(WHITE);
+        manage.setBackgroundTintList(null);
+        manage.setBackground(new android.graphics.drawable.RippleDrawable(
+                android.content.res.ColorStateList.valueOf(0x40FFFFFF), shape(INK, 14), null));
+        manage.setOnClickListener(v -> showTaskList());
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setPadding(dp(22), 0, dp(22), dp(10));
+        actions.addView(manage, new LinearLayout.LayoutParams(0, dp(48), 1));
+        if (!fixed.isEmpty()) {
+            Button locate = new Button(this);
+            locate.setText(fixed.size() + " fixed");
+            locate.setAllCaps(false);
+            locate.setTextColor(Ui.GREEN);
+            locate.setBackgroundTintList(null);
+            locate.setBackground(new android.graphics.drawable.RippleDrawable(
+                    android.content.res.ColorStateList.valueOf(0x20347E5B), Ui.round(Ui.FIXED_SURFACE, dp(12)), null));
+            locate.setContentDescription("Find fixed commitments on this day");
+            locate.setOnClickListener(v -> locateFixed(fixed));
+            LinearLayout.LayoutParams findParams = new LinearLayout.LayoutParams(-2, dp(48));
+            findParams.leftMargin = dp(10);
+            actions.addView(locate, findParams);
+        }
+        content.addView(actions);
+        if (planError != null) {
+            TextView error = label(planError, 13, Ui.RED, false);
+            error.setPadding(dp(22), 0, dp(22), dp(8));
+            content.addView(error);
+        }
         timelineScroll = new ScrollView(this);
         timelineScroll.setFillViewport(true);
         timelineScroll.setVerticalScrollBarEnabled(true);
@@ -225,32 +259,38 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         Map<Integer, Task> byId = new HashMap<>();
         for (Task t : tasks) byId.put(t.getTaskId(), t);
         List<ScheduleGenerator.Session> sessions = new ArrayList<>();
+        List<ScheduleItem> history = new ArrayList<>();
+        boolean past = selectedDayMillis < startOfDay(System.currentTimeMillis());
         for (ScheduleItem item : schedule) {
-            if (byId.containsKey(item.getTaskId()) && ("PLANNED".equals(item.getStatus())
-                    || "COMPLETED".equals(item.getStatus()))) {
+            Task task = byId.get(item.getTaskId());
+            if (task == null || "CANCELLED".equals(item.getStatus())) continue;
+            if (task.isArchived() || ScheduleItem.PAST_PLAN.equals(item.getStatus())) {
+                if (past) history.add(item);
+                continue;
+            }
+            if ("PLANNED".equals(item.getStatus()) || "COMPLETED".equals(item.getStatus())) {
                 sessions.add(new ScheduleGenerator.Session(item.getTaskId(),
                         new ScheduleGenerator.Interval(item.getStartTime(), item.getEndTime()), item.isManuallyEdited()));
             }
         }
         Set<Integer> dayTaskIds = new HashSet<>();
-        for (ScheduleItem item : schedule) if (!"CANCELLED".equals(item.getStatus())) dayTaskIds.add(item.getTaskId());
+        for (ScheduleGenerator.Session session : sessions) dayTaskIds.add((int) session.taskId);
+        for (ScheduleItem item : history) dayTaskIds.add(item.getTaskId());
         int finished = 0;
         for (Integer id : dayTaskIds) {
             Task task = byId.get(id);
             if (task != null && "COMPLETED".equals(task.getStatus())) finished++;
         }
-        summary.setText(finished + "/" + dayTaskIds.size());
+        summary.setText(past ? String.valueOf(dayTaskIds.size()) : finished + "/" + dayTaskIds.size());
         List<ScheduleDisplayBlocks.Block> blocks = ScheduleDisplayBlocks.group(sessions,
-                new ArrayList<ScheduleGenerator.Interval>(), focusBreakMinutes);
-        // Above the scrolling timeline (which jumps to the current time), so it is always visible.
-        if (sessions.isEmpty()) {
-            TextView empty = label(tasks.isEmpty()
-                    ? "No tasks yet. Tap Add to create your first task and Tempo will suggest a time."
-                    : "Nothing planned for this day yet. Tap Add to get a suggested time.", 13, MUTED, false);
-            empty.setPadding(dp(22), 0, dp(22), dp(8));
-            content.addView(empty, content.indexOfChild(timelineScroll));
+                busy, focusBreakMinutes);
+        addTimeline(blocks, byId, fixed, history);
+        if (sessions.isEmpty() && fixed.isEmpty() && history.isEmpty()) {
+            spacerIn(timelineBody, 14);
+            TextView add = detailAction(tasks.isEmpty() ? "No tasks yet · Add your first task" : "Nothing planned · Add a task", MINT);
+            add.setOnClickListener(v -> addTaskForSelectedDay());
+            timelineBody.addView(add);
         }
-        addTimeline(blocks, byId);
         spacerIn(timelineBody, 26);
         timelineBody.addView(label("TEMPO  ·  FIND YOUR RHYTHM", 11, MUTED, true));
         addBottomBar();
@@ -269,6 +309,23 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 newScroll.scrollTo(0, Math.max(0, y - newScroll.getHeight() / 2));
             } else if (restoreY >= 0) newScroll.scrollTo(0, restoreY);
         });
+    }
+
+    private void locateFixed(List<FixedBlocks.Entry> fixed) {
+        if (fixed.size() == 1) {
+            scrollToMinute(fixed.get(0).start);
+            return;
+        }
+        String[] choices = new String[fixed.size()];
+        for (int i = 0; i < choices.length; i++)
+            choices[i] = fixed.get(i).timeRange() + "   " + fixed.get(i).title();
+        new AlertDialog.Builder(this).setTitle("Fixed commitments").setItems(choices,
+                (d, which) -> scrollToMinute(fixed.get(which).start)).show();
+    }
+
+    private void scrollToMinute(int minute) {
+        int y = timelineCanvas.getTop() + dp(12) + Math.round(timelineScale.y(minute));
+        timelineScroll.smoothScrollTo(0, Math.max(0, y - dp(24)));
     }
 
     private void addWeekStrip() {
@@ -314,6 +371,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private static final class TimelineEntry {
         final TextView view;
         final int start, end;
+        boolean fixed, sideBySide;
         TimelineEntry(TextView view, int start, int end) { this.view = view; this.start = start; this.end = end; }
     }
 
@@ -326,10 +384,10 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         return local.get(Calendar.HOUR_OF_DAY) * 60 + local.get(Calendar.MINUTE);
     }
 
-    private void addTimeline(List<ScheduleDisplayBlocks.Block> blocks, Map<Integer, Task> byId) {
+    private void addTimeline(List<ScheduleDisplayBlocks.Block> blocks, Map<Integer, Task> byId, List<FixedBlocks.Entry> fixed, List<ScheduleItem> history) {
         TextView scaleNote = label("Short blocks are enlarged for readability · times are exact", 11, MUTED, false);
         scaleNote.setPadding(dp(62), 0, dp(10), dp(8));
-        if (!blocks.isEmpty()) timelineBody.addView(scaleNote);
+        if (!blocks.isEmpty() || !fixed.isEmpty() || !history.isEmpty()) timelineBody.addView(scaleNote);
         FrameLayout canvas = new FrameLayout(this);
         timelineCanvas = canvas;
         canvas.setBackgroundColor(WHITE);
@@ -337,19 +395,19 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         timelineBody.addView(canvas);
         // Measure wrapped text at the available width, then use the same expanded axis everywhere.
         int initialWidth = getResources().getDisplayMetrics().widthPixels;
-        drawTimeline(canvas, blocks, byId, initialWidth);
+        drawTimeline(canvas, blocks, byId, fixed, history, initialWidth);
         final int[] measuredWidth = {initialWidth};
         canvas.addOnLayoutChangeListener((v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
             int width = right - left;
             if (width > 0 && width != measuredWidth[0]) {
                 measuredWidth[0] = width;
-                drawTimeline(canvas, blocks, byId, width);
+                drawTimeline(canvas, blocks, byId, fixed, history, width);
             }
         });
     }
 
     private void drawTimeline(FrameLayout canvas, List<ScheduleDisplayBlocks.Block> blocks,
-                              Map<Integer, Task> byId, int width) {
+                              Map<Integer, Task> byId, List<FixedBlocks.Entry> fixed, List<ScheduleItem> history, int width) {
         canvas.removeAllViews();
         List<TimelineEntry> entries = new ArrayList<>();
         for (ScheduleDisplayBlocks.Block block : blocks) {
@@ -383,23 +441,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             event.setOnClickListener(v -> openScheduleDetail(task, block));
             entries.add(new TimelineEntry(event, start, end));
         }
-        for (FixedEvent fixed : fixedEvents) {
-            if (!fixed.occursOn(selectedDayMillis)) continue;
-            int start = fixed.getStartMinute(), end = fixed.getEndMinute();
-            String text = fixed.getTitle() + "\n" + fixed.timeText() + "  ·  Fixed every " + fixed.dayName();
-            TextView view = label(text, 12, MUTED, true);
-            view.setGravity(Gravity.CENTER_VERTICAL);
-            view.setPadding(dp(12), dp(6), dp(8), dp(6));
-            view.setMinHeight(dp(44));
-            GradientDrawable bg = new GradientDrawable();
-            bg.setColor(Color.rgb(236, 238, 241));
-            bg.setStroke(dp(1), Color.rgb(200, 206, 212), dp(5), dp(4));
-            bg.setCornerRadius(dp(12));
-            view.setBackground(bg);
-            view.setContentDescription(fixed.getTitle() + ", fixed " + fixed.timeText());
-            view.setOnClickListener(v -> startActivity(new Intent(this, FixedScheduleActivity.class)));
-            entries.add(new TimelineEntry(view, start, end));
-        }
         if (includeBreaks) {
             List<ScheduleGenerator.Session> ordered = new ArrayList<>();
             for (ScheduleItem item : schedule) if (byId.containsKey(item.getTaskId()) && "PLANNED".equals(item.getStatus())) {
@@ -412,6 +453,9 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 for (ScheduleDisplayBlocks.Block block : blocks) {
                     if (block.startMillis < rest.end && block.endMillis > rest.start) { occupied = true; break; }
                 }
+                for (FixedBlocks.Entry commitment : fixed) {
+                    if (start < commitment.end && commitment.start < end) { occupied = true; break; }
+                }
                 if (end <= start || occupied) continue;
                 int length = (int) ((rest.end - rest.start) / 60_000L);
                 TextView restView = label("Break " + length + " min", 11, MUTED, false);
@@ -422,10 +466,48 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 entries.add(new TimelineEntry(restView, start, end));
             }
         }
+        for (ScheduleItem past : history) {
+            int start = timelineMinute(past.getStartTime()), end = timelineMinute(past.getEndTime());
+            if (end <= start) continue;
+            String description = byId.get(past.getTaskId()).getTitle() + "\nPast plan · "
+                    + clock(past.getStartTime()) + "–" + clock(past.getEndTime());
+            TextView card = label(description, 13, MUTED, true);
+            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setPadding(dp(12), dp(8), dp(8), dp(8));
+            card.setBackground(shape(Color.rgb(238, 241, 238), 12));
+            entries.add(new TimelineEntry(card, start, end));
+        }
+        for (FixedBlocks.Entry commitment : fixed) {
+            String title = commitment.title();
+            String prefix = title + "\n" + commitment.timeRange() + " · ";
+            android.text.SpannableString caption = new android.text.SpannableString(prefix + "Fixed");
+            int flags = android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE;
+            caption.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), 0, title.length(), flags);
+            caption.setSpan(new android.text.style.ForegroundColorSpan(Ui.GREEN), prefix.length(), caption.length(), flags);
+            caption.setSpan(new android.text.style.StyleSpan(Typeface.BOLD), prefix.length(), caption.length(), flags);
+            TextView card = label("", 13, Ui.INK, false);
+            card.setText(caption);
+            card.setContentDescription("Fixed weekly commitment, " + commitment.title() + ", " + commitment.weeklyTime());
+            card.setGravity(Gravity.CENTER_VERTICAL);
+            card.setPadding(dp(12), dp(8), dp(8), dp(8));
+            card.setMinHeight(dp(48));
+            card.setBackground(Ui.fixedBackground(this));
+            TimelineEntry entry = new TimelineEntry(card, commitment.start, commitment.end);
+            entry.fixed = true;
+            // A failed replan can leave the old task and the newly saved routine overlapping.
+            for (TimelineEntry other : entries) {
+                if (!other.fixed && other.start < entry.end && entry.start < other.end) {
+                    other.sideBySide = true;
+                    entry.sideBySide = true;
+                }
+            }
+            entries.add(entry);
+        }
         List<TimelineScale.Span> spans = new ArrayList<>();
         int cardWidth = Math.max(1, width - dp(72));
+        int laneWidth = Math.max(1, (cardWidth - dp(4)) / 2);
         for (TimelineEntry entry : entries) {
-            entry.view.measure(View.MeasureSpec.makeMeasureSpec(cardWidth, View.MeasureSpec.EXACTLY),
+            entry.view.measure(View.MeasureSpec.makeMeasureSpec(entry.sideBySide ? laneWidth : cardWidth, View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
             spans.add(new TimelineScale.Span(entry.start, entry.end, entry.view.getMeasuredHeight() + dp(4)));
         }
@@ -449,6 +531,10 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             int startY = Math.round(scale.y(entry.start)), endY = Math.round(scale.y(entry.end));
             FrameLayout.LayoutParams ep = new FrameLayout.LayoutParams(-1, endY - startY - dp(4));
             ep.leftMargin = dp(62); ep.rightMargin = dp(10); ep.topMargin = dp(12) + startY + dp(2);
+            if (entry.sideBySide) {
+                ep.width = laneWidth;
+                if (entry.fixed) ep.leftMargin += laneWidth + dp(4);
+            }
             canvas.addView(entry.view, ep);
         }
         if (selectedDayMillis == startOfDay(System.currentTimeMillis())) {
@@ -508,7 +594,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 return;
             }
             Task found = null;
-            for (Task task : tasks) if (task.getTaskId() == active) found = task;
+            for (Task task : tasks) if (!task.isArchived() && task.getTaskId() == active) found = task;
             Intent intent = new Intent(this, FocusTimerActivity.class);
             intent.putExtra("taskId", active);
             intent.putExtra("title", found == null ? "Current task" : found.getTitle());
@@ -586,7 +672,8 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         detailScroll.addView(body);
         AlertDialog detail = new AlertDialog.Builder(this).setView(detailScroll).create();
         for (ScheduleItem item : schedule) {
-            if (item.getTaskId() != task.getTaskId() || item.getStartTime() < block.startMillis
+            if ("CANCELLED".equals(item.getStatus()) || ScheduleItem.PAST_PLAN.equals(item.getStatus())
+                    || item.getTaskId() != task.getTaskId() || item.getStartTime() < block.startMillis
                     || item.getEndTime() > block.endMillis) continue;
             TextView edit = detailAction(clock(item.getStartTime()) + "—" + clock(item.getEndTime())
                     + (item.isManuallyEdited() ? "  adjusted  ›" : "  suggested  ›"), BG);
@@ -606,7 +693,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         start.setOnClickListener(v -> { detail.dismiss(); openTimer(task); });
         body.addView(start);
         if (task.getTaskId() > 0) {
-            TextView delete = label("Delete task", 14, Color.rgb(170, 65, 55), false);
+            TextView delete = label("Archive task", 14, Color.rgb(170, 65, 55), false);
             delete.setGravity(Gravity.CENTER);
             delete.setOnClickListener(v -> { detail.dismiss(); confirmDeleteTask(task); });
             body.addView(delete, new LinearLayout.LayoutParams(-1, dp(48)));
@@ -625,25 +712,74 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             Toast.makeText(this, "Finish this task's focus session before deleting it.", Toast.LENGTH_LONG).show();
             return;
         }
-        new AlertDialog.Builder(this).setTitle("Delete task?")
-                .setMessage("Remove “" + task.getTitle() + "” and its planned times? Recorded focus history will be kept.")
+        if (task.isArchived()) { confirmErase(task); return; }
+        new AlertDialog.Builder(this).setTitle("Archive task?")
+                .setMessage("Remove “" + task.getTitle() + "” from the plan? Your saved activity stays in History and Insights.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Delete task", (dialog, which) ->
-                        RepositoryProvider.getTaskRepository().archiveTask(task.getTaskId(), new TaskRepository.Callback<Integer>() {
-                            @Override public void onSuccess(Integer rows) {
-                                if (rows == null || rows == 0) { loadData(); return; }
-                                AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
-                                    @Override public void onScheduled(ScheduleGenerator.Result result) { loadData(); }
-                                    @Override public void onFailed(String error) {
-                                        Toast.makeText(SchedulePreviewActivity.this, error, Toast.LENGTH_LONG).show();
-                                        loadData();
-                                    }
-                                });
-                            }
-                            @Override public void onError(Exception error) {
-                                Toast.makeText(SchedulePreviewActivity.this, "Could not delete task: " + error.getMessage(), Toast.LENGTH_LONG).show();
-                            }
-                        })).show();
+                .setNeutralButton("Delete permanently…", (d,w) -> confirmErase(task))
+                .setPositiveButton("Archive task", (d,w) -> removeTask(task, false)).show();
+    }
+
+    private void confirmErase(Task task) {
+        new AlertDialog.Builder(this).setTitle("Delete permanently?")
+                .setMessage("Delete “" + task.getTitle() + "” and all its activity records? This cannot be undone.")
+                .setNegativeButton("Cancel", null)
+                .setPositiveButton("Delete permanently", (d,w) -> removeTask(task, true)).show();
+    }
+
+    private void removeTask(Task task, boolean erase) {
+        TaskRepository repo = RepositoryProvider.getTaskRepository();
+        if (erase) repo.deleteTask(task.getTaskId(), afterTaskChange());
+        else repo.archiveTask(task.getTaskId(), afterTaskChange());
+    }
+
+    private TaskRepository.Callback<Integer> afterTaskChange() {
+        return new TaskRepository.Callback<Integer>() {
+            public void onSuccess(Integer rows) {
+                loadData();
+                AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
+                    public void onScheduled(ScheduleGenerator.Result result) { planError = null; loadData(); }
+                    public void onFailed(String error) { planError = error; loadData(); }
+                });
+            }
+            public void onError(Exception error) { showEditError(error.getMessage()); }
+        };
+    }
+
+    private void showTaskList() {
+        RepositoryProvider.getTaskRepository().getManageableTasks(new TaskRepository.Callback<List<Task>>() {
+            public void onSuccess(List<Task> list) {
+                if (isFinishing() || isDestroyed()) return;
+                String[] names = new String[list.size()];
+                for (int i = 0; i < names.length; i++) {
+                    Task task = list.get(i);
+                    String state = task.isArchived() ? "Archived" : "COMPLETED".equals(task.getStatus()) ? "Completed"
+                            : task.hasFutureSlot() ? "Scheduled" : "Unscheduled";
+                    names[i] = state + "  ·  " + task.getTitle();
+                }
+                new AlertDialog.Builder(SchedulePreviewActivity.this).setTitle("Manage tasks")
+                        .setItems(names, (d,i) -> showTaskActions(list.get(i)))
+                        .setPositiveButton("Add task", (d,w) -> addTaskForSelectedDay())
+                        .setNegativeButton("Close", null).show();
+            }
+            public void onError(Exception error) { showEditError(error.getMessage()); }
+        });
+    }
+
+    private void showTaskActions(Task task) {
+        if (task.isArchived()) {
+            new AlertDialog.Builder(this).setTitle(task.getTitle())
+                    .setItems(new String[]{"Restore task", "Delete permanently…"}, (d,i) -> {
+                        if (i == 0) RepositoryProvider.getTaskRepository().restoreTask(task.getTaskId(), afterTaskChange());
+                        else confirmDeleteTask(task);
+                    }).setNegativeButton("Close", null).show();
+            return;
+        }
+        new AlertDialog.Builder(this).setTitle(task.getTitle())
+                .setItems(new String[]{"Edit task", "Archive or delete…"}, (d,i) -> {
+                    if (i == 0) editTaskInfo(task);
+                    else confirmDeleteTask(task);
+                }).setNegativeButton("Close", null).show();
     }
 
     private String categoryName(String category) {
@@ -662,103 +798,10 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private String value(String text) { return text == null || text.trim().isEmpty() ? "Not set" : text; }
 
     private void editTaskInfo(Task source) {
-        if (source.getTaskId() > 0) {
-            Intent intent = new Intent(this, AddTaskActivity.class);
-            intent.putExtra("taskId", source.getTaskId());
-            intent.putExtra("selectedDayMillis", selectedDayMillis);
-            startActivity(intent);
-            return;
-        }
-        LinearLayout form = new LinearLayout(this);
-        form.setOrientation(LinearLayout.VERTICAL);
-        form.setPadding(dp(22), dp(12), dp(22), dp(8));
-        EditText title = input(form, "Task name", source.getTitle(), false);
-        EditText description = input(form, "Description", source.getDescription(), false);
-        EditText category = input(form, "Category", source.getCategory(), false);
-        EditText type = input(form, "Task type", source.getTaskType(), false);
-        EditText estimate = input(form, "Estimated minutes", String.valueOf(source.getEstimatedDuration()), true);
-        EditText difficulty = input(form, "Difficulty 1–5", String.valueOf(source.getDifficulty()), true);
-        EditText importance = input(form, "Importance 1–5", String.valueOf(source.getImportance()), true);
-        String deadlineValue = source.getDeadline() > 0
-                ? new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).format(new Date(source.getDeadline())) : "";
-        EditText deadline = input(form, "Deadline yyyy-MM-dd HH:mm · leave empty for none", deadlineValue, false);
-        ScrollView scroll = new ScrollView(this);
-        scroll.addView(form);
-        AlertDialog dialog = new AlertDialog.Builder(this).setTitle("Edit task")
-                .setView(scroll).setNegativeButton("Cancel", null)
-                .setPositiveButton("Save", null).create();
-        dialog.setOnShowListener(ignored -> dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
-            try {
-                int minutes = Integer.parseInt(estimate.getText().toString().trim());
-                int difficultyValue = Integer.parseInt(difficulty.getText().toString().trim());
-                int importanceValue = Integer.parseInt(importance.getText().toString().trim());
-                String newTitle = title.getText().toString().trim();
-                String newCategory = category.getText().toString().trim();
-                if (newTitle.isEmpty() || minutes <= 0 || difficultyValue < 1 || difficultyValue > 5
-                        || importanceValue < 1 || importanceValue > 5
-                        || com.tempo.app.ui.Categories.find(newCategory) == null) {
-                    throw new IllegalArgumentException("Enter a name, a positive duration, difficulty and importance from 1 to 5, and an existing category.");
-                }
-                long due = 0;
-                String dueText = deadline.getText().toString().trim();
-                if (!dueText.isEmpty()) {
-                    SimpleDateFormat format = new SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US);
-                    format.setLenient(false);
-                    Date parsed = format.parse(dueText);
-                    if (parsed == null || !format.format(parsed).equals(dueText)) throw new ParseException("Invalid date", 0);
-                    due = parsed.getTime();
-                }
-                for (ScheduleItem item : schedule) if (item.getTaskId() == source.getTaskId() && due > 0 && item.getEndTime() > due) {
-                    throw new IllegalArgumentException("The deadline cannot be earlier than the planned slots.");
-                }
-                Task updated = new Task();
-                updated.setTaskId(source.getTaskId()); updated.setTitle(newTitle);
-                updated.setDescription(description.getText().toString().trim());
-                updated.setCategory(newCategory); updated.setTaskType(type.getText().toString().trim());
-                updated.setEstimatedDuration(minutes); updated.setPredictedDuration(source.getPredictedDuration());
-                updated.setDifficulty(difficultyValue); updated.setImportance(importanceValue);
-                updated.setDeadline(due); updated.setStatus(source.getStatus());
-                updated.setCreatedAt(source.getCreatedAt());
-                if (source.getTaskId() <= 0) {
-                    tasks.set(tasks.indexOf(source), updated); dialog.dismiss(); render();
-                } else {
-                    RepositoryProvider.getTaskRepository().updateTask(updated, new TaskRepository.Callback<Integer>() {
-                        @Override public void onSuccess(Integer rows) {
-                            if (rows == null || rows == 0) { showEditError("Task not found; nothing was saved."); return; }
-                            dialog.dismiss();
-                            AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
-                                @Override public void onScheduled(ScheduleGenerator.Result result) { if (!isFinishing()) loadData(); }
-                                @Override public void onFailed(String error) {
-                                    if (isFinishing()) return;
-                                    Toast.makeText(SchedulePreviewActivity.this, error, Toast.LENGTH_LONG).show();
-                                    loadData();
-                                }
-                            });
-                        }
-                        @Override public void onError(Exception error) { showEditError("Could not save: " + error.getMessage()); }
-                    });
-                }
-            } catch (NumberFormatException error) {
-                showEditError("Minutes, difficulty and importance must be numbers.");
-            } catch (ParseException error) {
-                showEditError("Use yyyy-MM-dd HH:mm for the deadline.");
-            } catch (IllegalArgumentException error) {
-                showEditError(error.getMessage());
-            }
-        }));
-        dialog.show();
-    }
-
-    private EditText input(LinearLayout form, String hint, String value, boolean numeric) {
-        TextView label = label(hint, 12, MUTED, false);
-        form.addView(label);
-        EditText field = new EditText(this);
-        field.setSingleLine(true);
-        field.setText(value == null ? "" : value);
-        if (numeric) field.setInputType(InputType.TYPE_CLASS_NUMBER);
-        form.addView(field);
-        spacerIn(form, 10);
-        return field;
+        Intent intent = new Intent(this, AddTaskActivity.class);
+        intent.putExtra("taskId", source.getTaskId());
+        intent.putExtra("selectedDayMillis", selectedDayMillis);
+        startActivity(intent);
     }
 
     private void editSessionTimeTyped(Task task, ScheduleItem item) {
@@ -792,11 +835,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             if (task.getDeadline() > 0 && end > task.getDeadline()) {
                 showEditError("The end time cannot be after the task deadline."); return;
             }
-            int lockedMinutes = ScheduleEditRules.lockedMinutes(schedule, item, start, end);
-            int plannedMinutes = task.getPredictedDuration() > 0 ? task.getPredictedDuration() : task.getEstimatedDuration();
-            if (plannedMinutes > 0 && lockedMinutes > plannedMinutes) {
-                showEditError("Locked time cannot exceed the task's expected duration."); return;
-            }
             if (ScheduleEditRules.overlaps(schedule, item, start, end)) {
                 showEditError("This time overlaps another planned slot."); return;
             }
@@ -805,24 +843,40 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 dialog.dismiss(); render();
             } else {
                 String date = new SimpleDateFormat("yyyy-MM-dd", Locale.US).format(new Date(selectedDayMillis));
-                RepositoryProvider.getScheduleRepository().updatePlannedTime(item.getScheduleId(), date, start, end,
-                        new TaskRepository.Callback<Integer>() {
-                            @Override public void onSuccess(Integer rows) {
-                                dialog.dismiss();
-                                AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
-                                    @Override public void onScheduled(ScheduleGenerator.Result result) { loadData(); }
-                                    @Override public void onFailed(String error) {
-                                        Toast.makeText(SchedulePreviewActivity.this, error, Toast.LENGTH_LONG).show();
-                                        loadData();
-                                    }
-                                });
-                            }
-                            @Override public void onError(Exception error) { showEditError(error.getMessage()); }
-                        });
+                saveSlot(dialog, save, item.getScheduleId(), date, start, end, null);
             }
         });
         dialog.show();
         if (dialog.getWindow() != null) dialog.getWindow().setBackgroundDrawableResource(android.R.color.transparent);
+    }
+
+    private void saveSlot(AlertDialog editor, TextView save, int id, String date, long start, long end,
+                          ScheduleDao.RemainingConflict confirmation) {
+        save.setEnabled(false);
+        RepositoryProvider.getScheduleRepository().updatePlannedTime(id, date, start, end, confirmation,
+                new TaskRepository.Callback<Integer>() {
+                    @Override public void onSuccess(Integer rows) {
+                        if (isFinishing() || isDestroyed()) return;
+                        editor.dismiss();
+                        AutoScheduler.replan(SchedulePreviewActivity.this, new AutoScheduler.Listener() {
+                            @Override public void onScheduled(ScheduleGenerator.Result result) { planError = null; loadData(); }
+                            @Override public void onFailed(String error) { planError = error; loadData(); }
+                        });
+                    }
+                    @Override public void onError(Exception error) {
+                        if (isFinishing() || isDestroyed() || !editor.isShowing()) return;
+                        save.setEnabled(true);
+                        if (error instanceof ScheduleDao.RemainingConflict) {
+                            ScheduleDao.RemainingConflict conflict = (ScheduleDao.RemainingConflict) error;
+                            new AlertDialog.Builder(SchedulePreviewActivity.this)
+                                    .setTitle("Update remaining time?")
+                                    .setMessage(conflict.getMessage() + " Update the remaining estimate and save this slot?")
+                                    .setNegativeButton("Adjust slot", null)
+                                    .setPositiveButton("Use " + conflict.required + " min", (d, w) ->
+                                            saveSlot(editor, save, id, date, start, end, conflict)).show();
+                        } else showEditError(error.getMessage());
+                    }
+                });
     }
 
     private EditText timeInput(String hint, String value) {

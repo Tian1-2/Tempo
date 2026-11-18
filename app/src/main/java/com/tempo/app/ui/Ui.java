@@ -3,6 +3,8 @@ package com.tempo.app.ui;
 import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.Canvas;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.view.Gravity;
@@ -31,6 +33,29 @@ public final class Ui {
     public static final int STUDY = Color.rgb(63, 143, 107);
     public static final int WORK = Color.rgb(76, 111, 181);
     public static final int LIFE = Color.rgb(208, 138, 62);
+
+    public static final int FIXED_SURFACE = Color.rgb(239, 245, 242);
+
+    /** Both screens use the same rounded card and a four-dp stripe clipped to its left edge. */
+    public static GradientDrawable fixedBackground(Context context) {
+        int radius = dp(context, 12);
+        int stripeWidth = dp(context, 4);
+        GradientDrawable accent = round(GREEN, radius);
+        GradientDrawable surface = new GradientDrawable() {
+            @Override public void draw(Canvas canvas) {
+                super.draw(canvas);
+                Rect bounds = getBounds();
+                int saved = canvas.save();
+                canvas.clipRect(bounds.left, bounds.top, bounds.left + stripeWidth, bounds.bottom);
+                accent.setBounds(bounds);
+                accent.draw(canvas);
+                canvas.restoreToCount(saved);
+            }
+        };
+        surface.setColor(FIXED_SURFACE);
+        surface.setCornerRadius(radius);
+        return surface;
+    }
 
     private Ui() {}
 

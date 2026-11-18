@@ -49,7 +49,9 @@ public final class LearningRepository {
         run(store->store.updateTask(task,remaining,System.currentTimeMillis()),callback);
     }
     public void pendingTasks(TaskRepository.Callback<List<Task>> callback) {run(LearningStore::pendingTasks,callback);}
-    public void records(TaskRepository.Callback<List<LearningStore.Record>> callback) {run(store->store.records(200),callback);}
+    public void history(TaskRepository.Callback<LearningStore.History> callback) {
+        run(store -> store.history(System.currentTimeMillis()), callback);
+    }
     public void correct(long id,int revision,Integer minutes,int rating,TaskRepository.Callback<Void> callback) {
         run(store->{store.correctRecord(id,revision,minutes,rating,System.currentTimeMillis());return null;},callback);
     }

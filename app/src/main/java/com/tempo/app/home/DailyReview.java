@@ -6,6 +6,7 @@ import com.tempo.app.model.TaskFeedback;
 
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -36,9 +37,11 @@ public final class DailyReview {
     public final int completedTasks;
     public final int plannedMinutes;
     public final int focusMinutes;
-    /** Null when no task ran over its estimate. */
+    public final int finishedOnDay;
+    public final int tasksToGo;
+    /** Null when no eligible completed task ran over its original estimate. */
     public final Overrun overrun;
-    /** There were comparable estimates and none ran over. */
+    /** There were comparable completed tasks and all matched their original estimate. */
     public final boolean estimatesAccurate;
     /** 0-100; null when there is nothing to score. */
     public final Integer score;
@@ -46,12 +49,14 @@ public final class DailyReview {
     public final Integer completionPct, focusPct, accuracyPct;
 
     private DailyReview(int plannedTasks, int completedTasks, int plannedMinutes, int focusMinutes,
-                        Overrun overrun, boolean estimatesAccurate, Integer score,
+                        int finishedOnDay, int tasksToGo, Overrun overrun, boolean estimatesAccurate, Integer score,
                         Integer completionPct, Integer focusPct, Integer accuracyPct) {
         this.plannedTasks = plannedTasks;
         this.completedTasks = completedTasks;
         this.plannedMinutes = plannedMinutes;
         this.focusMinutes = focusMinutes;
+        this.finishedOnDay = finishedOnDay;
+        this.tasksToGo = tasksToGo;
         this.overrun = overrun;
         this.estimatesAccurate = estimatesAccurate;
         this.score = score;
@@ -69,58 +74,72 @@ public final class DailyReview {
      */
     public static DailyReview compute(long dayStart, long dayEnd, List<ScheduleItem> daySchedule,
                                       List<Task> tasks, List<TaskFeedback> feedback) {
+        // Counts remain available without prediction evidence; accuracy must not be guessed.
+        return compute(dayStart, dayEnd, daySchedule, tasks, feedback, Collections.emptyMap());
+    }
+
+    /**
+     * @param originalEstimates frozen pre-work estimates for eligible completed tasks,
+     *                          supplied by LearningStore.reviewEstimates using Insights rules.
+     *                          Missing evidence means no accuracy component, not zero accuracy.
+     */
+    public static DailyReview compute(long dayStart, long dayEnd, List<ScheduleItem> daySchedule,
+                                      List<Task> tasks, List<TaskFeedback> feedback,
+                                      Map<Integer, Integer> originalEstimates) {
         Map<Integer, Task> byId = new HashMap<>();
         if (tasks != null) for (Task t : tasks) if (t != null) byId.put(t.getTaskId(), t);
 
         Set<Integer> planned = new HashSet<>();
+        Set<Integer> pending = new HashSet<>();
         int plannedMinutes = 0;
         if (daySchedule != null) for (ScheduleItem item : daySchedule) {
             if (item == null || "CANCELLED".equals(item.getStatus())) continue; // cancelled after early completion
-            // A task the user deleted is not "planned but not done": leave it out of the plan.
-            // Callers pass the visible tasks, which exclude deleted ones.
-            Task owner = byId.get(item.getTaskId());
-            if (tasks != null && (owner == null || "DELETED".equals(owner.getStatus()))) continue;
             planned.add(item.getTaskId());
+            Task task = byId.get(item.getTaskId());
+            if ("PLANNED".equals(item.getStatus()) && task != null && !task.isArchived()
+                    && !"COMPLETED".equals(task.getStatus())) pending.add(item.getTaskId());
             plannedMinutes += (int) Math.max(0, (item.getEndTime() - item.getStartTime()) / 60_000L);
         }
-        int completed = 0;
-        for (int id : planned) {
-            Task t = byId.get(id);
-            if (t != null && "COMPLETED".equals(t.getStatus())) completed++;
-        }
-
+        Set<Integer> completedByEnd = new HashSet<>();
+        Set<Integer> finishedOnDay = new HashSet<>();
+        Set<Integer> missingDuration = new HashSet<>();
         int focus = 0;
-        Set<Integer> touched = new HashSet<>();                 // tasks with feedback on this day
         Map<Integer, Integer> actualUntilEnd = new HashMap<>(); // accumulated actual minutes up to dayEnd
         if (feedback != null) for (TaskFeedback f : feedback) {
             if (f == null || f.getCompletedAt() >= dayEnd) continue;
             int minutes = Math.max(0, f.getActualDuration());
+            if ("COMPLETED".equals(f.getCompletionStatus())) completedByEnd.add(f.getTaskId());
+            if (minutes == 0) missingDuration.add(f.getTaskId());
             Integer sum = actualUntilEnd.get(f.getTaskId());
             actualUntilEnd.put(f.getTaskId(), (sum == null ? 0 : sum) + minutes);
             if (f.getCompletedAt() >= dayStart) {
                 focus += minutes;
-                touched.add(f.getTaskId());
+                if ("COMPLETED".equals(f.getCompletionStatus())) finishedOnDay.add(f.getTaskId());
             }
         }
 
+        pending.removeAll(finishedOnDay);
+        // Early or unscheduled completions still belong to the day they were recorded.
+        planned.addAll(finishedOnDay);
+        int completed = 0;
+        for (int id : planned) if (completedByEnd.contains(id)) completed++;
         Overrun worst = null;
         double accuracySum = 0;
         int accuracySamples = 0;
-        for (int id : touched) {
+        // A partial total is not a completed-task prediction result.
+        for (int id : finishedOnDay) {
             Task t = byId.get(id);
-            if (t == null || t.getEstimatedDuration() <= 0) continue;
-            int estimate = t.getEstimatedDuration();
+            Integer original = originalEstimates == null ? null : originalEstimates.get(id);
+            if (t == null || original == null || original <= 0 || missingDuration.contains(id)) continue;
+            int estimate = original;
             Integer actualBoxed = actualUntilEnd.get(id);
             int actual = actualBoxed == null ? 0 : actualBoxed;
             int over = actual - estimate;
             if (over > 0 && (worst == null || over > worst.actualMinutes - worst.estimatedMinutes)) {
                 worst = new Overrun(t.getTitle(), estimate, actual);
             }
-            // Actual time is only comparable once the task is done or already over its estimate.
-            if ("COMPLETED".equals(t.getStatus()) || over > 0) {
-                accuracySum += Math.max(0.0, 1.0 - Math.abs(actual - estimate) / (double) estimate);
-                accuracySamples++;
-            }
+            accuracySum += Math.max(0.0, 1.0 - Math.abs(actual - estimate) / (double) estimate);
+            accuracySamples++;
         }
 
         double weighted = 0;
@@ -142,8 +161,8 @@ public final class DailyReview {
             weights += WEIGHT_ACCURACY;
         }
         Integer score = weights == 0 ? null : (int) Math.round(100 * weighted / weights);
-        return new DailyReview(planned.size(), completed, plannedMinutes, focus, worst,
-                worst == null && accuracySamples > 0, score,
+        return new DailyReview(planned.size(), completed, plannedMinutes, focus, finishedOnDay.size(), pending.size(), worst,
+                worst == null && accuracySamples > 0 && accuracySum == accuracySamples, score,
                 percent(completionPart), percent(focusPart), percent(accuracyPart));
     }
 
@@ -159,7 +178,7 @@ public final class DailyReview {
         if (plannedTasks > 0 && completedTasks == plannedTasks) return "You finished everything you planned yesterday. Amazing!";
         if (completedTasks > 0) return "You finished " + completedTasks + (completedTasks == 1 ? " task" : " tasks") + " yesterday. Steady progress!";
         if (plannedTasks > 0) return "Yesterday didn't go as planned, and that's okay. Today is a fresh start.";
-        if (focusMinutes > 0) return "You focused for " + formatMinutes(focusMinutes) + " yesterday. Keep it up!";
+        if (focusMinutes > 0) return "You recorded " + formatMinutes(focusMinutes) + " yesterday. Keep it up!";
         return "A brand new day. You've got this!";
     }
 

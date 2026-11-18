@@ -64,7 +64,7 @@ public final class Reminders {
         long notifiedSlot = prefs(c).getLong("notifiedSlot", -1), notifiedStart = prefs(c).getLong("notifiedStart", -1);
         try (Cursor cur = RepositoryProvider.getDatabaseHelper().getReadableDatabase().rawQuery(
                 "SELECT s.schedule_id, s.start_time FROM schedule_items s JOIN tasks t ON t.task_id = s.task_id "
-                        + "WHERE s.status = 'PLANNED' AND t.status IN ('PENDING','IN_PROGRESS') AND s.start_time > ? "
+                        + "WHERE s.status = 'PLANNED' AND t.archived = 0 AND t.status IN ('PENDING','IN_PROGRESS') AND s.start_time > ? "
                         // No second reminder for the next part of the same task right after its break.
                         + "AND NOT EXISTS (SELECT 1 FROM schedule_items p WHERE p.task_id = s.task_id "
                         + "AND p.schedule_id <> s.schedule_id AND p.status IN ('PLANNED','COMPLETED') "

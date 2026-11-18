@@ -7,6 +7,7 @@ import com.tempo.app.learning.LearningStore;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.model.UserProfile;
+import com.tempo.app.scheduler.FixedBlocks;
 import com.tempo.app.repository.RepositoryProvider;
 
 import java.text.SimpleDateFormat;
@@ -43,7 +44,7 @@ public final class SampleData {
 
     /** True when there is nothing to overwrite: sample data is only added to an empty app. */
     public static boolean canSeed() {
-        return RepositoryProvider.getTaskRepository().getAllTasksSync().isEmpty();
+        return RepositoryProvider.getTaskRepository().getTasksWithHistorySync().isEmpty();
     }
 
     /** Background thread only. */
@@ -64,10 +65,13 @@ public final class SampleData {
         }
 
         // A weekly lecture on today's weekday, so the demo shows planning around fixed commitments.
-        com.tempo.app.database.FixedEventDao fixed = new com.tempo.app.database.FixedEventDao(helper);
-        if (fixed.getAll().isEmpty()) {
-            fixed.insert(new com.tempo.app.model.FixedEvent("COMP7506 lecture",
-                    com.tempo.app.model.FixedEvent.isoDayOfWeek(now), 14 * 60, 16 * 60));
+        UserProfile profile = RepositoryProvider.getUserProfileRepository().getProfileSync();
+        if (profile != null && FixedBlocks.entries(profile.getFixedBlocks()).isEmpty()) {
+            java.util.Calendar today = java.util.Calendar.getInstance();
+            today.setTimeInMillis(now);
+            profile.setFixedBlocks(FixedBlocks.save(profile.getFixedBlocks(), null,
+                    today.get(java.util.Calendar.DAY_OF_WEEK) - 1, 14 * 60, 16 * 60, "COMP7506 lecture"));
+            new UserProfileDao(helper).saveProfile(profile);
         }
 
         // Six days ago → yesterday: completed work with realistic over- and under-runs.

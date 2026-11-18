@@ -71,10 +71,10 @@ public class CategoryDao {
         return dbHelper.getWritableDatabase().update("categories", values, "name = ?", new String[]{name});
     }
 
-    /** Tasks that are not deleted and still use this category. */
+    /** Tasks that use this category, archived ones included (they can be restored and keep their colour in History). */
     public int countTasks(String name) {
         try (Cursor c = dbHelper.getReadableDatabase().rawQuery(
-                "SELECT COUNT(*) FROM tasks WHERE category = ? COLLATE NOCASE AND status <> 'DELETED'", new String[]{name})) {
+                "SELECT COUNT(*) FROM tasks WHERE category = ? COLLATE NOCASE", new String[]{name})) {
             return c.moveToFirst() ? c.getInt(0) : 0;
         }
     }

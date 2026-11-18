@@ -1,6 +1,10 @@
 package com.tempo.app;
 
 import android.content.Context;
+import com.tempo.app.scheduler.FixedBlocks;
+import android.widget.ArrayAdapter;
+import android.widget.Button;
+import android.widget.Spinner;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Color;
@@ -28,6 +32,7 @@ import androidx.appcompat.app.AppCompatActivity;
 
 import com.tempo.app.home.DailyReview;
 import com.tempo.app.home.SampleData;
+import com.tempo.app.home.InternDemoData;
 import com.tempo.app.ui.Ui;
 import com.tempo.app.model.UserProfile;
 import com.tempo.app.repository.RepositoryProvider;
@@ -56,6 +61,8 @@ public class ProfileSettingsActivity extends AppCompatActivity {
     private TextView summary;
     private TextView profileState, recommended;
     private String planningFailure;
+    private String fixedBlocks = "";
+    private LinearLayout commitments;
     private Field wake, sleep, breakfast, lunch, dinner, start, focus, rest, capacity;
 
     /** One slider + text input pair. Stored values are minutes; daily capacity is shown in hours. */
@@ -208,19 +215,11 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         addField(focusCard, rest, "Break", "Rest between focus blocks", "min");
         addField(focusCard, capacity, "Daily task time", "Most Tempo will plan per day", "h");
         body.addView(focusCard);
-
-        section("FIXED SCHEDULE");
-        LinearLayout fixedCard = card();
-        fixedCard.setPadding(dp(16), dp(14), dp(16), dp(14));
-        fixedCard.addView(text("Classes and meetings", 15, INK, true));
-        space(fixedCard, 2);
-        fixedCard.addView(text("Weekly times Tempo keeps free, e.g. Tuesday 14:00–16:00 lecture. Saved separately from this page.",
-                13, MUTED, false));
-        space(fixedCard, 10);
-        TextView editFixed = Ui.secondary(this, "Edit fixed schedule");
-        editFixed.setOnClickListener(v -> startActivity(new Intent(this, FixedScheduleActivity.class)));
-        fixedCard.addView(editFixed);
-        body.addView(fixedCard);
+        space(body, 22);
+        commitments = card();
+        commitments.setPadding(dp(16), dp(18), dp(16), dp(16));
+        body.addView(commitments);
+        drawCommitments();
 
         section("CATEGORIES");
         LinearLayout categoryCard = card();
@@ -272,6 +271,8 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 profileState.setText("Your saved routine · edit any value below.");
                 recommended.setVisibility(View.GONE);
                 save.setText("Save changes");
+                fixedBlocks = value.getFixedBlocks();
+                drawCommitments();
                 load(wake, value.getWakeTime()); load(sleep, value.getSleepTime());
                 load(breakfast, value.getBreakfastTime()); load(lunch, value.getLunchTime());
                 load(dinner, value.getDinnerTime()); load(start, value.getPreferredStartTime());
@@ -288,6 +289,101 @@ public class ProfileSettingsActivity extends AppCompatActivity {
     private void load(Field field, String hhmm) {
         Integer minutes = hhmm == null ? null : field.parse(hhmm);
         if (minutes != null) field.set(minutes, true);
+    }
+
+    private void drawCommitments() {
+        commitments.removeAllViews();
+        commitments.addView(text("Fixed weekly commitments", 16, INK, true));
+        space(commitments, 5);
+        commitments.addView(text("Reserve time for recurring classes or meetings. Save your routine to apply.", 13, MUTED, false));
+        for (FixedBlocks.Entry entry : FixedBlocks.entries(fixedBlocks)) {
+            space(commitments, 10);
+            LinearLayout row = new LinearLayout(this);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            row.setPadding(dp(12), dp(4), dp(4), dp(4));
+            row.setBackground(Ui.fixedBackground(this));
+            LinearLayout description = new LinearLayout(this);
+            description.setOrientation(LinearLayout.VERTICAL);
+            description.setGravity(Gravity.CENTER_VERTICAL);
+            description.setMinimumHeight(dp(48));
+            description.addView(text(entry.title(), 15, Ui.INK, true));
+            description.addView(text(entry.weeklyTime(), 13, Ui.INK, false));
+            description.setContentDescription("Edit " + entry.title() + ", " + entry.weeklyTime());
+            description.setOnClickListener(v -> editCommitment(entry));
+            description.setFocusable(true);
+            row.addView(description, new LinearLayout.LayoutParams(0, -2, 1));
+            Button remove = new Button(this, null, android.R.attr.borderlessButtonStyle);
+            remove.setText("Remove");
+            remove.setAllCaps(false);
+            remove.setTextColor(Ui.GREEN);
+            remove.setContentDescription("Remove " + entry.title() + ", " + entry.weeklyTime());
+            remove.setOnClickListener(v -> {
+                java.util.List<String> rows = FixedBlocks.lines(fixedBlocks);
+                rows.remove(entry.row);
+                fixedBlocks = FixedBlocks.join(rows);
+                drawCommitments();
+            });
+            row.addView(remove);
+            commitments.addView(row);
+        }
+        space(commitments, 14);
+        TextView add = Ui.secondary(this, "+  Add weekly commitment");
+        add.setOnClickListener(v -> editCommitment(null));
+        commitments.addView(add);
+    }
+
+    private void editCommitment(FixedBlocks.Entry original) {
+        LinearLayout form = new LinearLayout(this);
+        form.setOrientation(LinearLayout.VERTICAL);
+        form.setPadding(dp(20), dp(12), dp(20), dp(8));
+        EditText name = new EditText(this);
+        name.setSingleLine(true);
+        name.setHint("Name (optional)");
+        name.setFilters(new android.text.InputFilter[]{new android.text.InputFilter.LengthFilter(60)});
+        name.setText(original == null ? "" : original.name);
+        form.addView(name);
+        space(form, 8);
+        form.addView(text("Repeats every", 13, MUTED, false));
+        Spinner day = new Spinner(this);
+        ArrayAdapter<String> weekdays = new ArrayAdapter<>(this, android.R.layout.simple_spinner_dropdown_item, FixedBlocks.DAYS);
+        day.setAdapter(weekdays);
+        day.setSelection(original == null ? java.util.Calendar.getInstance().get(java.util.Calendar.DAY_OF_WEEK) - 1 : original.day);
+        form.addView(day, new LinearLayout.LayoutParams(-1, dp(48)));
+        int[] times = {original == null ? 540 : original.start, original == null ? 600 : original.end};
+        for (int i = 0; i < times.length; i++) {
+            final int index = i;
+            String label = i == 0 ? "Start" : "End";
+            space(form, 6);
+            Button choose = new Button(this);
+            choose.setAllCaps(false);
+            choose.setText(label + "   " + FixedBlocks.clock(times[i]));
+            choose.setOnClickListener(v -> {
+                int initial = times[index] % 1440;
+                new android.app.TimePickerDialog(this, (picker, hour, minute) -> {
+                    int value = 60 * hour + minute;
+                    times[index] = index == 1 && value == 0 ? 1440 : value;
+                    choose.setText(label + "   " + FixedBlocks.clock(times[index]));
+                }, initial / 60, initial % 60, true).show();
+            });
+            form.addView(choose);
+        }
+        TextView error = text("", 13, Ui.RED, false);
+        error.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        form.addView(error);
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(form);
+        android.app.AlertDialog dialog = new android.app.AlertDialog.Builder(this)
+                .setTitle(original == null ? "Add weekly commitment" : "Edit weekly commitment")
+                .setView(scroll).setNegativeButton("Cancel", null).setPositiveButton("Done", null).create();
+        dialog.setOnShowListener(d -> dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener(v -> {
+            try {
+                fixedBlocks = FixedBlocks.save(fixedBlocks, original, day.getSelectedItemPosition(),
+                        times[0], times[1], name.getText().toString());
+                drawCommitments();
+                dialog.dismiss();
+            } catch (IllegalArgumentException invalid) { error.setText(invalid.getMessage()); }
+        }));
+        dialog.show();
     }
 
     private void useRecommendedRoutine() {
@@ -440,6 +536,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         updated.setPreferredStartTime(start.format(start.value));
         updated.setFocusDuration(focus.value);
         updated.setBreakDuration(rest.value);
+        updated.setFixedBlocks(fixedBlocks);
         updated.setDailyCapacity(capacity.value);
         save.setEnabled(false);
         save.setText("Saving…");
@@ -449,7 +546,10 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 // The routine changed, so re-plan today before leaving.
                 AutoScheduler.replan(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Saved · today's plan updated"); }
-                    @Override public void onFailed(String message) { planningFailure = message; done("Saved · plan needs attention"); }
+                    @Override public void onFailed(String message) { planningFailure = message;
+                        if (!isFinishing() && !isDestroyed()) new android.app.AlertDialog.Builder(ProfileSettingsActivity.this)
+                                .setTitle("Routine saved · plan unchanged").setMessage(message)
+                                .setCancelable(false).setPositiveButton("OK", (d,w) -> done("Routine saved")).show(); }
                 });
             }
             @Override public void onError(Exception error) {
@@ -462,22 +562,34 @@ public class ProfileSettingsActivity extends AppCompatActivity {
 
     private void confirmSampleData() {
         new android.app.AlertDialog.Builder(this)
-                .setTitle("Load sample data?")
-                .setMessage("Adds a week of example tasks and focus sessions, then plans today. This only works while the app has no tasks.")
+                .setTitle("Choose demo data")
+                .setItems(new String[]{"General sample week", "Internship + evening classes"},
+                        (d,which) -> confirmSampleData(which==1))
+                .setNegativeButton("Cancel", null).show();
+    }
+
+    private void confirmSampleData(boolean internship) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(internship ? "Load internship demo?" : "Load sample data?")
+                .setMessage(internship
+                        ? "Use an empty demo installation set to Monday, 07:00–08:25. Suggested: 23 Nov 2026, 08:00. This replaces the routine and adds simulated history, a Monday meeting, 19:00–22:00 classes and two manually placed personal tasks."
+                        : "Adds a week of simulated tasks and focus sessions, then plans the next seven days. This only works while the app has no tasks, including archived tasks.")
                 .setNegativeButton("Cancel", null)
-                .setPositiveButton("Load", (d, w) -> loadSampleData())
+                .setPositiveButton("Load", (d, w) -> loadSampleData(internship))
                 .show();
     }
 
-    private void loadSampleData() {
+    private void loadSampleData(boolean internship) {
         save.setEnabled(false);
-        java.util.concurrent.Executors.newSingleThreadExecutor().execute(() -> {
+        java.util.concurrent.ExecutorService worker=java.util.concurrent.Executors.newSingleThreadExecutor();
+        worker.execute(() -> {
             String error = null;
             try {
-                SampleData.seed();
+                if(internship) InternDemoData.seed(RepositoryProvider.getDatabaseHelper(),System.currentTimeMillis());
+                else SampleData.seed();
             } catch (Exception e) {
                 error = e.getMessage();
-            }
+            } finally { worker.shutdown(); }
             String failure = error;
             runOnUiThread(() -> {
                 if (isFinishing()) return;
@@ -488,7 +600,9 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 }
                 AutoScheduler.replan(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
                     @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Sample data loaded"); }
-                    @Override public void onFailed(String message) { done("Sample data loaded"); }
+                    @Override public void onFailed(String message) {
+                        planningFailure=message;done("Sample data loaded; planning needs attention");
+                    }
                 });
             });
         });

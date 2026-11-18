@@ -1,6 +1,10 @@
 package com.tempo.app.model;
 
 public class UserProfile {
+    private String fixedBlocks = "";
+    public String getFixedBlocks() { return fixedBlocks; }
+    public void setFixedBlocks(String value) { fixedBlocks = value == null ? "" : value; }
+
 
     private int profileId;           // always 1 (single user)
 

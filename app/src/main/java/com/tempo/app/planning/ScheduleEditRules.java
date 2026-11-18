@@ -19,13 +19,23 @@ public final class ScheduleEditRules {
         return false;
     }
 
-    public static int lockedMinutes(List<ScheduleItem> day, ScheduleItem edited, long start, long end) {
-        long total = (end - start) / 60_000L;
-        for (ScheduleItem other : day) {
-            if (isOtherActive(other, edited) && other.getTaskId() == edited.getTaskId() && other.isManuallyEdited()) {
-                total += (other.getEndTime() - other.getStartTime()) / 60_000L;
-            }
+    public static int futureMinutes(long start, long end, long now) {
+        long boundary = Math.floorDiv(now + 59_999L, 60_000L) * 60_000L;
+        return (int) Math.max(0L, (end - Math.max(start, boundary)) / 60_000L);
+    }
+
+    /** Count the proposed slot and all other future manual reservations for this task on every date. */
+    public static int lockedMinutes(List<ScheduleItem> taskSlots, ScheduleItem edited, long start, long end, long now) {
+        int total = futureMinutes(start, end, now);
+        for (ScheduleItem other : taskSlots) {
+            if (isOtherActive(other, edited) && "PLANNED".equals(other.getStatus())
+                    && other.getTaskId() == edited.getTaskId() && other.isManuallyEdited())
+                total += futureMinutes(other.getStartTime(), other.getEndTime(), now);
         }
-        return (int) Math.min(Integer.MAX_VALUE, total);
+        return total;
+    }
+
+    public static int lockedMinutes(List<ScheduleItem> day, ScheduleItem edited, long start, long end) {
+        return lockedMinutes(day, edited, start, end, Long.MIN_VALUE);
     }
 }
