@@ -50,7 +50,7 @@ public final class Categories {
         return c != null ? c.getColor() : Category.fallbackColor(name);
     }
 
-    public static int soft(String name) { return Category.soft(color(name)); }
+    public static int soft(String name) { return Category.soft(color(name)); } // day tint; pages use Ui.soften() so it also works at night
 
     /** Display name: the stored spelling, or the task's own text for unknown names. */
     public static String name(String value) {

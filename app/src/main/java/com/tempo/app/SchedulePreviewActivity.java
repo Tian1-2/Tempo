@@ -51,11 +51,11 @@ import java.util.Collections;
 
 /** Visual prototype for Home + a functional, resumable focus timer. */
 public class SchedulePreviewActivity extends AppCompatActivity {
-    private static final int BG = Color.rgb(247, 248, 245);
-    private static final int INK = Color.rgb(30, 48, 52);
-    private static final int MUTED = Color.rgb(105, 120, 119);
-    private static final int MINT = Color.rgb(194, 232, 213);
-    private static final int WHITE = Color.WHITE;
+    private final int BG = com.tempo.app.ui.Ui.BG;
+    private final int INK = com.tempo.app.ui.Ui.INK;
+    private final int MUTED = com.tempo.app.ui.Ui.MUTED;
+    private final int MINT = com.tempo.app.ui.Ui.MINT;
+    private final int WHITE = com.tempo.app.ui.Ui.CARD;
     private final List<Task> tasks = new ArrayList<>();
     private final List<ScheduleItem> schedule = new ArrayList<>();
     private boolean includeBreaks = true;
@@ -79,7 +79,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     @Override protected void onCreate(Bundle state) {
         super.onCreate(state);
         getWindow().setStatusBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(com.tempo.app.ui.Ui.isDark() ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
         RepositoryProvider.init(this);
         selectedDayMillis = startOfDay(getIntent().getLongExtra("selectedDayMillis", System.currentTimeMillis()));
@@ -198,7 +198,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         addWeekStrip();
         spacer(13);
         View divider = new View(this);
-        divider.setBackgroundColor(Color.rgb(225, 231, 226));
+        divider.setBackgroundColor(com.tempo.app.ui.Ui.LINE);
         LinearLayout.LayoutParams dividerParams = new LinearLayout.LayoutParams(-1, dp(1));
         dividerParams.leftMargin = dp(22); dividerParams.rightMargin = dp(22);
         content.addView(divider, dividerParams);
@@ -210,14 +210,14 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         TextView dayLabel = label("Scheduled tasks",
                 16, INK, true);
         row.addView(dayLabel);
-        TextView summary = label("0/0", 16, Color.rgb(52, 126, 91), true);
+        TextView summary = label("0/0", 16, com.tempo.app.ui.Ui.GREEN, true);
         LinearLayout.LayoutParams countParams = new LinearLayout.LayoutParams(0, -2, 1);
         countParams.leftMargin = dp(9);
         row.addView(summary, countParams);
         TextView toggle = label(includeBreaks ? "Breaks  on" : "Breaks  off", 12, MUTED, false);
         toggle.setGravity(Gravity.CENTER);
         toggle.setPadding(dp(12), dp(7), dp(12), dp(7));
-        toggle.setBackground(shape(Color.rgb(232, 237, 233), 12));
+        toggle.setBackground(shape(com.tempo.app.ui.Ui.SUBTLE, 12));
         toggle.setOnClickListener(v -> { includeBreaks = !includeBreaks; render(); });
         row.addView(toggle);
         content.addView(row);
@@ -231,10 +231,10 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         manage.setAllCaps(false);
         manage.setTextSize(15);
         manage.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        manage.setTextColor(WHITE);
+        manage.setTextColor(Color.WHITE);
         manage.setBackgroundTintList(null);
         manage.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x40FFFFFF), shape(INK, 14), null));
+                android.content.res.ColorStateList.valueOf(0x40FFFFFF), shape(com.tempo.app.ui.Ui.ACTION, 14), null));
         manage.setOnClickListener(v -> showTaskList());
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL);
@@ -437,11 +437,11 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             event.setMinHeight(dp(48));
             event.setContentDescription(description + ("COMPLETED".equals(task.getStatus()) ? ", completed" : ", not completed"));
             if ("COMPLETED".equals(task.getStatus())) {
-                event.setBackground(shape(Color.rgb(229, 233, 230), 12));
+                event.setBackground(shape(com.tempo.app.ui.Ui.SUBTLE, 12));
             } else {
                 // Category colour: a tinted card with a solid stripe on the left edge.
                 GradientDrawable fill = new GradientDrawable();
-                fill.setColor(com.tempo.app.ui.Categories.soft(task.getCategory()));
+                fill.setColor(Ui.soften(com.tempo.app.ui.Categories.color(task.getCategory())));
                 fill.setCornerRadius(dp(12));
                 GradientDrawable stripe = new GradientDrawable();
                 stripe.setColor(com.tempo.app.ui.Categories.color(task.getCategory()));
@@ -475,7 +475,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 restView.setGravity(Gravity.CENTER_VERTICAL);
                 restView.setPadding(dp(12), dp(4), dp(8), dp(4));
                 restView.setMinHeight(dp(28));
-                restView.setBackground(shape(Color.rgb(240, 243, 239), 7));
+                restView.setBackground(shape(com.tempo.app.ui.Ui.SUBTLE, 7));
                 entries.add(new TimelineEntry(restView, start, end));
             }
         }
@@ -487,7 +487,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             TextView card = label(description, 13, MUTED, true);
             card.setGravity(Gravity.TOP | Gravity.START);
             card.setPadding(dp(12), dp(8), dp(8), dp(8));
-            card.setBackground(shape(Color.rgb(238, 241, 238), 12));
+            card.setBackground(shape(com.tempo.app.ui.Ui.SUBTLE, 12));
             entries.add(new TimelineEntry(card, start, end));
         }
         for (FixedBlocks.Entry commitment : fixed) {
@@ -536,7 +536,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             TextView time = label(String.format(Locale.US, "%02d:00", hour), 11, MUTED, false);
             FrameLayout.LayoutParams tp = new FrameLayout.LayoutParams(dp(48), dp(24));
             tp.leftMargin = dp(10); tp.topMargin = top - dp(8); canvas.addView(time, tp);
-            View line = new View(this); line.setBackgroundColor(Color.rgb(231, 235, 231));
+            View line = new View(this); line.setBackgroundColor(com.tempo.app.ui.Ui.LINE);
             FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(-1, dp(1));
             lp.leftMargin = dp(59); lp.topMargin = top; canvas.addView(line, lp);
         }
@@ -558,7 +558,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             View marker = new View(this); marker.setBackgroundColor(red);
             FrameLayout.LayoutParams mp = new FrameLayout.LayoutParams(-1, dp(2));
             mp.leftMargin = dp(55); mp.topMargin = y; canvas.addView(marker, mp);
-            TextView timeBadge = label(new SimpleDateFormat("HH:mm", Locale.US).format(new Date()), 11, WHITE, true);
+            TextView timeBadge = label(new SimpleDateFormat("HH:mm", Locale.US).format(new Date()), 11, Color.WHITE, true);
             timeBadge.setGravity(Gravity.CENTER);
             timeBadge.setBackground(shape(red, 7));
             FrameLayout.LayoutParams bp = new FrameLayout.LayoutParams(dp(50), dp(22));
@@ -609,7 +609,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 13, Color.WHITE, true);
         banner.setGravity(Gravity.CENTER_VERTICAL);
         banner.setPadding(dp(16), 0, dp(16), 0);
-        banner.setBackground(shape(INK, 14));
+        banner.setBackground(shape(com.tempo.app.ui.Ui.ACTION, 14));
         banner.setOnClickListener(v -> {
             Intent intent = new Intent(this, FocusTimerActivity.class);
             intent.putExtra("taskId", active);
@@ -653,7 +653,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
 
     private void openScheduleDetail(Task task, ScheduleDisplayBlocks.Block block) {
         LinearLayout body = panel(WHITE);
-        body.addView(label("SCHEDULED", 11, Color.rgb(52, 126, 91), true));
+        body.addView(label("SCHEDULED", 11, com.tempo.app.ui.Ui.GREEN, true));
         spacerIn(body, 8);
         body.addView(label(task.getTitle(), 22, INK, true));
         spacerIn(body, 8);
@@ -661,7 +661,7 @@ public class SchedulePreviewActivity extends AppCompatActivity {
                 + "  ·  " + block.taskMinutes + " min planned"
                 + (block.breakMinutes > 0 ? " + " + block.breakMinutes + " min break" : ""), 14, MUTED, false));
         spacerIn(body, 18);
-        View divider = new View(this); divider.setBackgroundColor(Color.rgb(225, 231, 226));
+        View divider = new View(this); divider.setBackgroundColor(com.tempo.app.ui.Ui.LINE);
         body.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
         spacerIn(body, 16);
         body.addView(label("Deadline  " + (task.getDeadline() > 0
@@ -696,13 +696,13 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             body.addView(editTask); spacerIn(body, 10);
         }
         TextView start = detailAction("COMPLETED".equals(task.getStatus()) ? "Task completed" : "Start focus  →",
-                "COMPLETED".equals(task.getStatus()) ? MINT : INK);
-        if (!"COMPLETED".equals(task.getStatus())) start.setTextColor(WHITE); // app-wide primary action
+                "COMPLETED".equals(task.getStatus()) ? MINT : Ui.ACTION);
+        if (!"COMPLETED".equals(task.getStatus())) start.setTextColor(Color.WHITE); // app-wide primary action
         start.setEnabled(!"COMPLETED".equals(task.getStatus()));
         start.setOnClickListener(v -> { detail.dismiss(); openTimer(task); });
         body.addView(start);
         if (task.getTaskId() > 0) {
-            TextView delete = label("Archive task", 14, Color.rgb(170, 65, 55), false);
+            TextView delete = label("Archive task", 14, com.tempo.app.ui.Ui.RED, false);
             delete.setGravity(Gravity.CENTER);
             delete.setOnClickListener(v -> { detail.dismiss(); confirmDeleteTask(task); });
             body.addView(delete, new LinearLayout.LayoutParams(-1, dp(48)));

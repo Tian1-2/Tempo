@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Dark palette, matching ui/Ui.java at night. Names keep their day-time roles. -->
+    <color name="insights_white">#121816</color>
+    <color name="insights_ice">#1E2D27</color>
+    <color name="insights_pale">#1C2422</color>
+    <color name="insights_navy">#E6EEEB</color>
+    <color name="insights_muted">#9AABA7</color>
+    <color name="insights_blue">#6FC79A</color>
+    <color name="insights_line">#2E3835</color>
+</resources>

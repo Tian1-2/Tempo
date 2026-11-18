@@ -15,7 +15,7 @@ public final class HomeIconView extends View {
     public HomeIconView(Context context) {
         super(context);
         setContentDescription("Go to home");
-        paint.setColor(Color.rgb(105, 120, 119));
+        paint.setColor(com.tempo.app.ui.Ui.MUTED);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(2));
         paint.setStrokeCap(Paint.Cap.ROUND);

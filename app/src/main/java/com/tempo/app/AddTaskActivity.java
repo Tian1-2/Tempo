@@ -41,11 +41,11 @@ public class AddTaskActivity extends AppCompatActivity {
     private static final int EDIT_ROUTINE = 71;
     private int taskAwaitingRoutine = -1;
     private String taskAwaitingRoutineTitle;
-    private static final int BG = Color.rgb(247, 248, 245);
-    private static final int INK = Color.rgb(30, 48, 52);
-    private static final int MUTED = Color.rgb(105, 120, 119);
-    private static final int MINT = Color.rgb(194, 232, 213);
-    private static final int BORDER = Color.rgb(226, 232, 227);
+    private final int BG = com.tempo.app.ui.Ui.BG;
+    private final int INK = com.tempo.app.ui.Ui.INK;
+    private final int MUTED = com.tempo.app.ui.Ui.MUTED;
+    private final int MINT = com.tempo.app.ui.Ui.MINT;
+    private final int BORDER = com.tempo.app.ui.Ui.LINE;
     private long selectedDayMillis;
     private EditText title, description, estimate, deadline;
     private TextView save;
@@ -68,7 +68,7 @@ public class AddTaskActivity extends AppCompatActivity {
         selectedDayMillis = getIntent().getLongExtra("selectedDayMillis", System.currentTimeMillis());
         editingTaskId = getIntent().getIntExtra("taskId", -1);
         getWindow().setStatusBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(com.tempo.app.ui.Ui.isDark() ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
         getWindow().setSoftInputMode(android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
 
@@ -100,7 +100,7 @@ public class AddTaskActivity extends AppCompatActivity {
         page.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
 
         TextView date = text(editingTaskId > 0 ? "TASK DETAILS" : "STEP 1 · DESCRIBE THE TASK",
-                13, Color.rgb(52, 126, 91), true);
+                13, com.tempo.app.ui.Ui.GREEN, true);
         body.addView(date);
         space(body, 8);
         body.addView(text(editingTaskId > 0 ? "Edit task" : "New task", 26, INK, true));
@@ -201,7 +201,7 @@ public class AddTaskActivity extends AppCompatActivity {
         // App-wide primary action: dark button with white text.
         save = text(editingTaskId > 0 ? "Save changes" : "Save and plan", 16, Color.WHITE, true);
         save.setGravity(Gravity.CENTER);
-        save.setBackground(shape(INK, 16));
+        save.setBackground(shape(com.tempo.app.ui.Ui.ACTION, 16));
         save.setOnClickListener(v -> saveTask());
         footer.addView(save, new LinearLayout.LayoutParams(-1, dp(54)));
         page.addView(footer);
@@ -220,7 +220,7 @@ public class AddTaskActivity extends AppCompatActivity {
             LinearLayout chip = new LinearLayout(this);
             chip.setGravity(Gravity.CENTER_VERTICAL);
             chip.setPadding(dp(14), 0, dp(16), 0);
-            GradientDrawable bg = shape(selected ? com.tempo.app.model.Category.soft(color) : Color.WHITE, 14);
+            GradientDrawable bg = shape(selected ? com.tempo.app.ui.Ui.soften(color) : com.tempo.app.ui.Ui.CARD, 14);
             if (selected) bg.setStroke(dp(2), color);
             chip.setBackground(bg);
             View dot = new View(this);
@@ -453,7 +453,7 @@ public class AddTaskActivity extends AppCompatActivity {
         body.setOrientation(LinearLayout.VERTICAL);
         body.setPadding(dp(24), dp(32), dp(24), dp(24));
         page.addView(body, new LinearLayout.LayoutParams(-1, 0, 1));
-        body.addView(text("STEP 2 · SUGGESTED TIME", 11, Color.rgb(52, 126, 91), true));
+        body.addView(text("STEP 2 · SUGGESTED TIME", 11, com.tempo.app.ui.Ui.GREEN, true));
         space(body, 10);
         body.addView(text(rows == null || rows.isEmpty() ? "Task saved · not scheduled" : "Task scheduled", 28, INK, true));
         space(body, 8);
@@ -499,7 +499,7 @@ public class AddTaskActivity extends AppCompatActivity {
         footer.setPadding(dp(22), dp(10), dp(22), dp(20));
         if (rows == null || rows.isEmpty()) {
             if (AutoScheduler.NO_PROFILE.equals(scheduleNote)) {
-                TextView profile = text("Set up routine", 14, Color.rgb(52, 126, 91), true);
+                TextView profile = text("Set up routine", 14, com.tempo.app.ui.Ui.GREEN, true);
                 profile.setGravity(Gravity.CENTER);
                 profile.setOnClickListener(v -> {
                     taskAwaitingRoutine = task.getTaskId();
@@ -508,7 +508,7 @@ public class AddTaskActivity extends AppCompatActivity {
                 });
                 footer.addView(profile, new LinearLayout.LayoutParams(-1, dp(42)));
             }
-            TextView retry = text("Plan again", 14, Color.rgb(52, 126, 91), true);
+            TextView retry = text("Plan again", 14, com.tempo.app.ui.Ui.GREEN, true);
             retry.setGravity(Gravity.CENTER);
             retry.setOnClickListener(v -> scheduleAndShow(task.getTaskId(), task.getTitle()));
             footer.addView(retry, new LinearLayout.LayoutParams(-1, dp(42)));
@@ -537,14 +537,14 @@ public class AddTaskActivity extends AppCompatActivity {
     }
     private void section(LinearLayout parent, String value) {
         // Section label in the app-wide eyebrow style.
-        TextView label = text(value.toUpperCase(Locale.US), 11, Color.rgb(52, 126, 91), true);
+        TextView label = text(value.toUpperCase(Locale.US), 11, com.tempo.app.ui.Ui.GREEN, true);
         label.setLetterSpacing(0.14f);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
         params.bottomMargin = dp(10); parent.addView(label, params);
     }
     private LinearLayout card() {
         LinearLayout card = new LinearLayout(this); card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(12), dp(18), dp(12)); card.setBackground(shape(Color.WHITE, 22));
+        card.setPadding(dp(18), dp(12), dp(18), dp(12)); card.setBackground(shape(com.tempo.app.ui.Ui.CARD, 22));
         card.setElevation(dp(2));
         return card;
     }

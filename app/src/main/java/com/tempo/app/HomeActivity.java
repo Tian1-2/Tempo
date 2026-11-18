@@ -56,9 +56,10 @@ import java.util.concurrent.Executors;
  * created, because Home usually stays alive in the background overnight.
  */
 public class HomeActivity extends AppCompatActivity {
-    private static final int BG = Color.rgb(247, 248, 245);
+    private final int BG = com.tempo.app.ui.Ui.BG;
     private static final String PREFS = "tempo_home";
     private static final String KEY_GREETED = "greetedDate";
+    private static final String KEY_SKIPPED_CLASSES = "skippedClassesStep";
     private static final String PAGE = "file:///android_asset/home/index.html";
     private static final long MINUTE = 60_000L;
 
@@ -83,7 +84,7 @@ public class HomeActivity extends AppCompatActivity {
         super.onCreate(state);
         RepositoryProvider.init(this);
         getWindow().setStatusBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(com.tempo.app.ui.Ui.isDark() ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
 
         FrameLayout root = new FrameLayout(this);
@@ -175,6 +176,10 @@ public class HomeActivity extends AppCompatActivity {
             main.post(() -> openTimer(taskId));
         }
 
+        @JavascriptInterface public void skipClasses() {
+            main.post(() -> { prefs().edit().putBoolean(KEY_SKIPPED_CLASSES, true).apply(); load(); });
+        }
+
         @JavascriptInterface public void finishGreeting() {
             main.post(() -> markGreeted(System.currentTimeMillis()));
         }
@@ -234,8 +239,20 @@ public class HomeActivity extends AppCompatActivity {
         d.put("showReview", greet);
         d.put("dayKey", dateKey(todayStart));
         d.put("loadId", now);
-        d.put("hasProfile", profile != null && profile.getWakeTime() != null
-                && profile.getSleepTime() != null && profile.getFocusDuration() > 0);
+        boolean hasProfile = profile != null && profile.getWakeTime() != null
+                && profile.getSleepTime() != null && profile.getFocusDuration() > 0;
+        d.put("hasProfile", hasProfile);
+        d.put("dark", com.tempo.app.ui.Ui.isDark());
+        // First-run guide: routine → weekly classes (optional) → first task. It disappears once
+        // the routine is saved and a task exists.
+        boolean hasClasses = profile != null && profile.getFixedBlocks() != null && !profile.getFixedBlocks().trim().isEmpty();
+        boolean hasTask = tasks != null && !tasks.isEmpty();
+        JSONObject setup = new JSONObject();
+        setup.put("show", !(hasProfile && hasTask));
+        setup.put("routine", hasProfile);
+        setup.put("classes", hasClasses || prefs().getBoolean(KEY_SKIPPED_CLASSES, false));
+        setup.put("task", hasTask);
+        d.put("setup", setup);
 
         JSONObject t = new JSONObject();
         t.put("planned", today.tasksToGo + today.finishedOnDay);

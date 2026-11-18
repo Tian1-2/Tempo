@@ -33,9 +33,9 @@ import java.util.Locale;
 
 /** Dedicated focus page. The clock keeps running while this page is closed. */
 public class FocusTimerActivity extends AppCompatActivity {
-    private static final int INK = Color.rgb(30, 48, 52);
-    private static final int BG = Color.rgb(247, 248, 245);
-    private static final int MINT = Color.rgb(194, 232, 213);
+    private final int INK = com.tempo.app.ui.Ui.INK;
+    private final int BG = com.tempo.app.ui.Ui.BG;
+    private final int MINT = com.tempo.app.ui.Ui.MINT;
     private static final String PREF = "tempo_focus_timer";
     private final Handler handler = new Handler(Looper.getMainLooper());
     private int taskId;
@@ -62,7 +62,7 @@ public class FocusTimerActivity extends AppCompatActivity {
         targetMinutes = getIntent().getIntExtra("targetMinutes", 0);
         if (taskId == Integer.MIN_VALUE || title == null) { finish(); return; }
         getWindow().setStatusBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(com.tempo.app.ui.Ui.isDark() ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
         LinearLayout page = new LinearLayout(this);
         page.setOrientation(LinearLayout.VERTICAL);
@@ -75,7 +75,7 @@ public class FocusTimerActivity extends AppCompatActivity {
         BackChevronView back = new BackChevronView(this, "Back");
         back.setOnClickListener(v -> finish());
         navigation.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView backLabel = text("Back", 14, Color.rgb(105, 120, 119), false);
+        TextView backLabel = text("Back", 14, com.tempo.app.ui.Ui.MUTED, false);
         backLabel.setGravity(Gravity.CENTER_VERTICAL);
         backLabel.setOnClickListener(v -> finish());
         backLabel.setIncludeFontPadding(false);
@@ -89,7 +89,7 @@ public class FocusTimerActivity extends AppCompatActivity {
         center.setGravity(Gravity.CENTER);
         center.setPadding(dp(22), 0, dp(22), 0);
         page.addView(center, new LinearLayout.LayoutParams(-1, 0, 1));
-        TextView kicker = text("FOCUS", 11, Color.rgb(52, 126, 91), true);
+        TextView kicker = text("FOCUS", 11, com.tempo.app.ui.Ui.GREEN, true);
         kicker.setGravity(Gravity.CENTER);
         kicker.setLetterSpacing(0.14f);
         center.addView(kicker);
@@ -103,15 +103,15 @@ public class FocusTimerActivity extends AppCompatActivity {
         FrameLayout dial = new FrameLayout(this);
         GradientDrawable dialBackground = new GradientDrawable();
         dialBackground.setShape(GradientDrawable.OVAL);
-        dialBackground.setColor(Color.WHITE);
-        dialBackground.setStroke(dp(1), Color.rgb(225, 231, 226));
+        dialBackground.setColor(com.tempo.app.ui.Ui.CARD);
+        dialBackground.setStroke(dp(1), com.tempo.app.ui.Ui.LINE);
         dial.setBackground(dialBackground);
         progressRing = new ProgressRingView();
         dial.addView(progressRing, new FrameLayout.LayoutParams(-1, -1));
         LinearLayout digits = new LinearLayout(this);
         digits.setOrientation(LinearLayout.VERTICAL);
         digits.setGravity(Gravity.CENTER);
-        status = text("Ready", 13, Color.rgb(52, 126, 91), true);
+        status = text("Ready", 13, com.tempo.app.ui.Ui.GREEN, true);
         status.setGravity(Gravity.CENTER);
         digits.addView(status);
         space(digits, 12);
@@ -120,11 +120,11 @@ public class FocusTimerActivity extends AppCompatActivity {
         clock.setGravity(Gravity.CENTER);
         digits.addView(clock);
         space(digits, 12);
-        TextView elapsedLabel = text("Focused", 12, Color.rgb(105, 120, 119), false);
+        TextView elapsedLabel = text("Focused", 12, com.tempo.app.ui.Ui.MUTED, false);
         elapsedLabel.setGravity(Gravity.CENTER);
         digits.addView(elapsedLabel);
         space(digits, 8);
-        targetLabel = text("Loading target…", 12, Color.rgb(105, 120, 119), false);
+        targetLabel = text("Loading target…", 12, com.tempo.app.ui.Ui.MUTED, false);
         targetLabel.setGravity(Gravity.CENTER);
         digits.addView(targetLabel);
         dial.addView(digits, new FrameLayout.LayoutParams(-1, -1));
@@ -133,11 +133,11 @@ public class FocusTimerActivity extends AppCompatActivity {
         LinearLayout footer = new LinearLayout(this);
         footer.setOrientation(LinearLayout.VERTICAL);
         footer.setPadding(dp(22), 0, dp(22), 0);
-        TextView note = text("The timer keeps running if you leave this page", 12, Color.rgb(105, 120, 119), false);
+        TextView note = text("The timer keeps running if you leave this page", 12, com.tempo.app.ui.Ui.MUTED, false);
         note.setGravity(Gravity.CENTER);
         footer.addView(note);
         space(footer, 18);
-        toggle = action("Start focus", INK, false);
+        toggle = action("Start focus", com.tempo.app.ui.Ui.ACTION, false);
         toggle.setTextColor(Color.WHITE); // app-wide primary action: dark button, white text
         toggle.setOnClickListener(v -> {
             if (FocusSessionState.isFromEarlierDay(prefs(), System.currentTimeMillis())) {
@@ -331,7 +331,7 @@ public class FocusTimerActivity extends AppCompatActivity {
     private GradientDrawable rounded(int color, int radius, boolean outlined) {
         GradientDrawable background = new GradientDrawable();
         background.setColor(color); background.setCornerRadius(dp(radius));
-        if (outlined) background.setStroke(dp(1), Color.rgb(225, 231, 226));
+        if (outlined) background.setStroke(dp(1), com.tempo.app.ui.Ui.LINE);
         return background;
     }
     private final class ProgressRingView extends View {
@@ -345,7 +345,7 @@ public class FocusTimerActivity extends AppCompatActivity {
             if (progress <= 0f) return;
             float inset = dp(7);
             bounds.set(inset, inset, getWidth() - inset, getHeight() - inset);
-            ringPaint.setColor(Color.rgb(52, 126, 91));
+            ringPaint.setColor(com.tempo.app.ui.Ui.GREEN);
             ringPaint.setStyle(Paint.Style.STROKE);
             ringPaint.setStrokeWidth(dp(5));
             ringPaint.setStrokeCap(Paint.Cap.ROUND);

@@ -44,14 +44,32 @@ import java.util.Locale;
 
 /** Profile settings: every value can be dragged on a slider or typed into its field. */
 public class ProfileSettingsActivity extends AppCompatActivity {
-    private static final int BG = Color.rgb(247, 248, 245);
-    private static final int INK = Color.rgb(30, 48, 52);
-    private static final int MUTED = Color.rgb(105, 120, 119);
-    private static final int MINT = Color.rgb(194, 232, 213);
-    private static final int MINT_SOFT = Color.rgb(232, 245, 238);
-    private static final int GREEN = Color.rgb(52, 126, 91);
-    private static final int BORDER = Color.rgb(226, 232, 227);
-    private static final int MEAL = Color.rgb(208, 138, 62);
+    /** The system "save as" screen: no storage permission needed, the user picks where the file goes. */
+    private final androidx.activity.result.ActivityResultLauncher<String> exportCsv = registerForActivityResult(
+            new androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/csv"), uri -> {
+                if (uri == null) return;
+                new Thread(() -> {
+                    String error = null;
+                    try (java.io.OutputStream out = getContentResolver().openOutputStream(uri)) {
+                        if (out == null) throw new java.io.IOException("No file");
+                        out.write(com.tempo.app.export.CsvExport.build(
+                                RepositoryProvider.getDatabaseHelper().getReadableDatabase())
+                                .getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                    } catch (Exception e) { error = e.getMessage(); }
+                    final String failure = error;
+                    runOnUiThread(() -> Toast.makeText(this, failure == null ? "Exported" : "Could not export: " + failure,
+                            Toast.LENGTH_LONG).show());
+                }, "csv-export").start();
+            });
+
+    private final int BG = com.tempo.app.ui.Ui.BG;
+    private final int INK = com.tempo.app.ui.Ui.INK;
+    private final int MUTED = com.tempo.app.ui.Ui.MUTED;
+    private final int MINT = com.tempo.app.ui.Ui.MINT;
+    private final int MINT_SOFT = com.tempo.app.ui.Ui.MINT_SOFT;
+    private final int GREEN = com.tempo.app.ui.Ui.GREEN;
+    private final int BORDER = com.tempo.app.ui.Ui.LINE;
+    private final int MEAL = com.tempo.app.ui.Ui.LIFE;
 
     private UserProfile profile;
     private LinearLayout body;
@@ -124,7 +142,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         super.onCreate(state);
         RepositoryProvider.init(this);
         getWindow().setStatusBarColor(BG);
-        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
+        getWindow().getDecorView().setSystemUiVisibility(com.tempo.app.ui.Ui.isDark() ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
 
         FrameLayout root = new FrameLayout(this);
@@ -234,6 +252,20 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         categoryCard.addView(editCategories);
         body.addView(categoryCard);
 
+        section("YOUR DATA");
+        LinearLayout dataCard = card();
+        dataCard.setPadding(dp(16), dp(14), dp(16), dp(14));
+        dataCard.addView(text("Export to a spreadsheet", 15, INK, true));
+        space(dataCard, 2);
+        dataCard.addView(text("Saves every activity record (date, task, category, minutes, outcome) as a CSV file "
+                + "you can open in Excel or Google Sheets. Everything else stays on this phone.", 13, MUTED, false));
+        space(dataCard, 10);
+        TextView export = Ui.secondary(this, "Export CSV");
+        export.setOnClickListener(v -> exportCsv.launch("tempo-export-"
+                + new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(new java.util.Date()) + ".csv"));
+        dataCard.addView(export);
+        body.addView(dataCard);
+
         section("REMINDERS");
         reminderCard = card();
         reminderCard.setPadding(dp(16), dp(10), dp(16), dp(14));
@@ -248,7 +280,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         save = text("Save", 16, Color.WHITE, true);
         save.setGravity(Gravity.CENTER);
         GradientDrawable saveBg = new GradientDrawable();
-        saveBg.setColor(INK);
+        saveBg.setColor(com.tempo.app.ui.Ui.ACTION);
         saveBg.setCornerRadius(dp(16));
         save.setBackground(saveBg);
         save.setElevation(dp(6));
@@ -506,7 +538,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 ? DailyReview.formatMinutes(awake) + " awake · up to " + DailyReview.formatMinutes(capacity.value)
                         + " of tasks · " + focus.value + " / " + rest.value + " rhythm"
                 : "Bedtime must be later than wake-up");
-        summary.setTextColor(awake > 0 ? INK : Color.rgb(178, 60, 47));
+        summary.setTextColor(awake > 0 ? INK : com.tempo.app.ui.Ui.RED);
         strip.update(wake.value, sleep.value, start.value, DefaultScheduleConstraints.PRODUCTIVE_MINUTES,
                 new int[]{breakfast.value, lunch.value, dinner.value});
     }
@@ -631,10 +663,10 @@ public class ProfileSettingsActivity extends AppCompatActivity {
 
         DayStripView(Context context) {
             super(context);
-            track.setColor(MINT_SOFT);
-            awake.setColor(MINT);
-            focusPaint.setColor(GREEN);
-            meal.setColor(MEAL);
+            track.setColor(com.tempo.app.ui.Ui.MINT_SOFT);
+            awake.setColor(com.tempo.app.ui.Ui.MINT);
+            focusPaint.setColor(com.tempo.app.ui.Ui.GREEN);
+            meal.setColor(com.tempo.app.ui.Ui.LIFE);
         }
 
         void update(int wake, int sleep, int focusStart, int focusMinutes, int[] meals) {
@@ -735,7 +767,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         card.setOrientation(LinearLayout.VERTICAL);
         card.setPadding(dp(16), dp(2), dp(16), dp(4));
         GradientDrawable bg = new GradientDrawable();
-        bg.setColor(Color.WHITE);
+        bg.setColor(com.tempo.app.ui.Ui.CARD);
         bg.setCornerRadius(dp(22));
         card.setBackground(bg);
         card.setElevation(dp(2));

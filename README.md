@@ -18,9 +18,13 @@ on-device SQLite database.
 | **Automatic planning** | Re-plans the next 7 days whenever a task, the profile or the fixed schedule changes, or a focus session ends. Keeps breaks between tasks, prefers one continuous block per task, respects deadlines and the daily limit, and never creates pieces shorter than 10 minutes (a 34-minute task with 25-minute focus becomes 17 + 17, not 25 + 9). If manually locked time exceeds what a task still needs, the old plan is kept and the task is named. |
 | **Stable plan** | Opening the schedule does not move suggestions you have already seen. A slot is moved only when it is more than 15 minutes past its start and still not done. |
 | **Schedule** | Week strip and a 24-hour timeline. Tap a block to start a focus timer, move a slot with time wheels, or archive a task (its past plan and history are kept; it can be restored). Past days show the plan as it was. |
-| **Categories** | Study, Work and Life to start with; add your own (e.g. Club) and pick a colour. The colour marks the task on Home, the schedule and History. |
+| **Categories** | Study, Work and Life to start with; add your own (e.g. Club), pick a colour, rename it (tasks and history follow). The colour marks the task on Home, the schedule and History. |
 | **Reminders** | A notification shortly before each planned task (at start, or 5/10/15 min before); tapping it opens the focus timer. Works after a reboot. |
 | **Focus timer** | Start, pause and resume; the session review records minutes, difficulty and whether the task is done. |
+| **Getting started** | On first launch Home shows three steps: set your routine, add weekly classes (optional), add a first task. |
+| **Navigation** | Schedule, Insights and History share Home's bottom bar (Schedule · Insights · + · History · Profile). Forms (Profile, Add task, Categories) use Back. |
+| **Dark mode** | Follows the phone's light/dark setting on every page, including the Home web page. |
+| **Export** | Profile → *Export CSV* saves every activity record as a spreadsheet file (no storage permission needed). |
 | **Insights** | Three tabs: Overview (7-day recorded time, completion, categories), Estimates (your estimate vs Tempo's prediction, MAE) and Patterns (days, difficulty, time of day, deadlines). Plus an editable activity history. |
 
 ## Requirements
@@ -83,11 +87,12 @@ app/src/main/java/com/tempo/app/
                 FixedBlocks (weekly commitments stored in the profile)
   learning/     duration learning, remaining work, feedback storage
   insights/     statistics and charts
-  database/     SQLiteOpenHelper (version 7) and DAOs (tasks, feedback, profile, schedule, categories)
+  database/     SQLiteOpenHelper (version 8) and DAOs (tasks, feedback, profile, schedule, categories)
   repository/   async repositories used by the screens
   model/        Task, ScheduleItem, UserProfile, TaskFeedback, Category
   reminders/    alarm scheduling, notification and reboot receivers
-  ui/           shared styles, category colour cache and dialogs
+  export/       CSV export of activity records
+  ui/           shared light/dark palette, bottom bar, category colour cache and dialogs
 app/src/main/assets/home/   home page (HTML rendered in a WebView)
 checks/                     JVM + SQLite verification scripts
 ```

@@ -4,4 +4,9 @@
         <!-- Customize your dark theme here. -->
         <!-- <item name="colorPrimary">@color/my_dark_primary</item> -->
     </style>
+    <!-- Wheel date/time pickers follow the dark palette at night. -->
+    <style name="TempoWheelPicker" parent="android:style/Theme.Material.Dialog.Alert">
+        <item name="android:datePickerMode">spinner</item>
+        <item name="android:timePickerMode">spinner</item>
+    </style>
 </resources>

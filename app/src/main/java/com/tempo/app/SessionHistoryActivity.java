@@ -65,8 +65,8 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
         page.addView(com.tempo.app.ui.BottomNav.create(this,com.tempo.app.ui.BottomNav.Tab.HISTORY,null));
         setContentView(page);
-        WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightStatusBars(true);
-        WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightNavigationBars(true);
+        WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightStatusBars(!com.tempo.app.ui.Ui.isDark());
+        WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightNavigationBars(!com.tempo.app.ui.Ui.isDark());
         ViewCompat.setOnApplyWindowInsetsListener(page,(v,insets)->{
             Insets safe=insets.getInsets(WindowInsetsCompat.Type.systemBars()|WindowInsetsCompat.Type.displayCutout()|WindowInsetsCompat.Type.ime());
             v.setPadding(safe.left,safe.top,safe.right,safe.bottom);return insets;
@@ -184,7 +184,7 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         LinearLayout line = new LinearLayout(this);
         line.setGravity(Gravity.CENTER_VERTICAL);
         line.setPadding(0, dp(14), 0, dp(14));
-        line.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.MINT_SOFT), null, Ui.round(Color.WHITE, dp(12))));
+        line.setBackground(new RippleDrawable(ColorStateList.valueOf(Ui.MINT_SOFT), null, Ui.round(Ui.CARD, dp(12))));
         line.setOnClickListener(v -> edit(row));
 
         View dot = new View(this);

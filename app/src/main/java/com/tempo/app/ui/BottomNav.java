@@ -41,7 +41,7 @@ public final class BottomNav {
 
         LinearLayout bar = new LinearLayout(activity);
         bar.setGravity(Gravity.CENTER_VERTICAL);
-        GradientDrawable card = Ui.round(Color.WHITE, dp(activity, 24));
+        GradientDrawable card = Ui.round(Ui.CARD, dp(activity, 24));
         bar.setBackground(card);
         bar.setElevation(dp(activity, 6));
         bar.addView(item(activity, R.drawable.ic_nav_schedule, "Schedule", current == Tab.SCHEDULE,
@@ -58,7 +58,7 @@ public final class BottomNav {
         ImageView add = new ImageView(activity);
         add.setImageResource(R.drawable.ic_nav_add);
         add.setScaleType(ImageView.ScaleType.CENTER);
-        add.setBackground(Ui.round(Ui.INK, dp(activity, 19)));
+        add.setBackground(Ui.round(Ui.ACTION, dp(activity, 19)));
         add.setElevation(dp(activity, 10));
         add.setContentDescription("Add task");
         add.setOnClickListener(v -> {
@@ -80,9 +80,9 @@ public final class BottomNav {
         item.setGravity(Gravity.CENTER);
         ImageView image = new ImageView(activity);
         Drawable drawable = activity.getDrawable(icon);
-        if (drawable != null && selected) {
+        if (drawable != null) {
             drawable = drawable.mutate();
-            drawable.setTintList(ColorStateList.valueOf(Ui.GREEN));
+            drawable.setTintList(ColorStateList.valueOf(selected ? Ui.GREEN : Ui.INK));
         }
         image.setImageDrawable(drawable);
         item.addView(image, new LinearLayout.LayoutParams(dp(activity, 22), dp(activity, 22)));

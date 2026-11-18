@@ -81,8 +81,8 @@ public class InsightsActivity extends AppCompatActivity {
         setContentView(R.layout.activity_insights);
         View root = findViewById(R.id.insights_root);
         WindowInsetsControllerCompat controller = WindowCompat.getInsetsController(getWindow(), root);
-        controller.setAppearanceLightStatusBars(true);
-        controller.setAppearanceLightNavigationBars(true);
+        controller.setAppearanceLightStatusBars(!com.tempo.app.ui.Ui.isDark());
+        controller.setAppearanceLightNavigationBars(!com.tempo.app.ui.Ui.isDark());
         ViewCompat.setOnApplyWindowInsetsListener(root, (v, insets) -> {
             Insets safe = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                     | WindowInsetsCompat.Type.displayCutout());

@@ -78,6 +78,8 @@ future plans use realistic durations.
 8. **Morning review** — between 07:00 and 09:00, yesterday's score from completion, recorded time and
    estimate accuracy.
 9. **Reminders** — notification before each task; tap to start focusing.
+10. **Comfort features** — first-run guide, shared bottom navigation, dark mode, category rename and CSV
+    export of all activity records.
 
 **TODO:** add 3–4 screenshots (Home, Schedule, Insights, Add task) with one-line captions.
 

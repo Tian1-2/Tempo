@@ -79,8 +79,8 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         scroll.setFillViewport(true); scroll.setBackgroundColor(getColor(R.color.insights_white));
         LinearLayout page = new LinearLayout(this); page.setOrientation(LinearLayout.VERTICAL);
         page.setPadding(dp(20), dp(12), dp(20), dp(28)); page.setClipToPadding(false); scroll.addView(page); setContentView(scroll);
-        WindowCompat.getInsetsController(getWindow(), scroll).setAppearanceLightStatusBars(true);
-        WindowCompat.getInsetsController(getWindow(), scroll).setAppearanceLightNavigationBars(true);
+        WindowCompat.getInsetsController(getWindow(), scroll).setAppearanceLightStatusBars(!com.tempo.app.ui.Ui.isDark());
+        WindowCompat.getInsetsController(getWindow(), scroll).setAppearanceLightNavigationBars(!com.tempo.app.ui.Ui.isDark());
         ViewCompat.setOnApplyWindowInsetsListener(scroll, (v,insets) -> {
             Insets safe = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout() | WindowInsetsCompat.Type.ime());
             v.setPadding(safe.left,safe.top,safe.right,safe.bottom); return insets;
@@ -89,7 +89,7 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         InsightsIcon back = new InsightsIcon(this, InsightsIcon.Kind.BACK, MUTED);
         back.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         back.setFocusable(true);
-        back.setBackground(new RippleDrawable(ColorStateList.valueOf(getColor(R.color.insights_ice)), null, shape(Color.WHITE)));
+        back.setBackground(new RippleDrawable(ColorStateList.valueOf(getColor(R.color.insights_ice)), null, shape(com.tempo.app.ui.Ui.CARD)));
         back.setContentDescription(manual?"Back to insights":"Back to paused timer"); back.setOnClickListener(v -> { if (!saving) finish(); });
         LinearLayout navigation = new LinearLayout(this);
         navigation.setGravity(Gravity.CENTER_VERTICAL);
@@ -244,14 +244,14 @@ public final class TaskFeedbackActivity extends AppCompatActivity {
         TextView t=text(title,15,style==PRIMARY?Color.WHITE:style==SECONDARY?NAVY:MUTED,style!=TERTIARY);
         t.setGravity(Gravity.CENTER); t.setMinHeight(dp(style==TERTIARY?48:54));
         t.setPadding(dp(16),dp(12),dp(16),dp(12)); t.setFocusable(true);
-        GradientDrawable background=shape(style==PRIMARY?NAVY:style==SECONDARY?Color.WHITE:Color.TRANSPARENT);
+        GradientDrawable background=shape(style==PRIMARY?com.tempo.app.ui.Ui.ACTION:style==SECONDARY?com.tempo.app.ui.Ui.CARD:Color.TRANSPARENT);
         if(style==SECONDARY) background.setStroke(dp(1),getColor(R.color.insights_line));
         t.setBackground(new RippleDrawable(ColorStateList.valueOf(getColor(R.color.insights_ice)),background,null));
         return t;
     }
     private GradientDrawable shape(int color){GradientDrawable d=new GradientDrawable();d.setColor(color);d.setCornerRadius(dp(16));return d;}
     private LinearLayout card(){LinearLayout l=new LinearLayout(this);l.setOrientation(LinearLayout.VERTICAL);l.setPadding(dp(20),dp(20),dp(20),dp(20));
-        GradientDrawable d=shape(Color.WHITE);d.setCornerRadius(dp(22));l.setBackground(d);l.setElevation(dp(2));return l;}
+        GradientDrawable d=shape(com.tempo.app.ui.Ui.CARD);d.setCornerRadius(dp(22));l.setBackground(d);l.setElevation(dp(2));return l;}
     private void gap(LinearLayout l,int h){l.addView(new View(this),new LinearLayout.LayoutParams(1,dp(h)));}
     private int dp(int v){return Math.round(v*getResources().getDisplayMetrics().density);}
 }

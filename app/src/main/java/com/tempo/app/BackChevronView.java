@@ -15,7 +15,7 @@ public final class BackChevronView extends View {
     public BackChevronView(Context context, String description) {
         super(context);
         setContentDescription(description);
-        paint.setColor(Color.rgb(105, 120, 119));
+        paint.setColor(com.tempo.app.ui.Ui.MUTED);
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(dp(2f));
         paint.setStrokeCap(Paint.Cap.ROUND);
