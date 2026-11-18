@@ -61,6 +61,12 @@ public final class FixedBlocks {
         return result.toString();
     }
 
+    /** One stored row, e.g. "Tue 14:00-16:00\tCOMP7506 lecture" (day: 0 = Sunday … 6 = Saturday). */
+    public static String row(int day, int start, int end, String title) {
+        String name = title == null ? "" : title.trim();
+        return DAYS[day] + " " + clock(start) + "-" + clock(end) + (name.isEmpty() ? "" : "\t" + name);
+    }
+
     public static String add(String existing, int day, int start, int end) {
         return save(existing, null, day, start, end, "");
     }
@@ -76,7 +82,7 @@ public final class FixedBlocks {
         for (Entry other : entries(join(rows)))
             if (other.day == day && start < other.end && other.start < end)
                 throw new IllegalArgumentException("This overlaps another fixed commitment.");
-        rows.add(DAYS[day] + " " + clock(start) + "-" + clock(end) + (name.isEmpty() ? "" : "\t" + name));
+        rows.add(row(day, start, end, name));
         return join(rows);
     }
 

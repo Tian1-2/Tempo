@@ -26,7 +26,8 @@ public class UserProfileDao {
         p.setBreakDuration(cursor.getInt(cursor.getColumnIndexOrThrow("break_duration")));
         p.setDailyCapacity(cursor.getInt(cursor.getColumnIndexOrThrow("daily_capacity")));
         p.setPreferredStartTime(cursor.getString(cursor.getColumnIndexOrThrow("preferred_start_time")));
-        p.setFixedBlocks(cursor.getString(cursor.getColumnIndexOrThrow("fixed_blocks")));
+        // Since V8 weekly commitments live in their own table (see FixedCommitmentDao).
+        p.setFixedBlocks(FixedCommitmentDao.read(dbHelper.getReadableDatabase()));
         return p;
     }
 
@@ -54,14 +55,20 @@ public class UserProfileDao {
         values.put("daily_capacity", p.getDailyCapacity());
         values.put("preferred_start_time", p.getPreferredStartTime());
 
-        values.put("fixed_blocks", p.getFixedBlocks());
+        values.putNull("fixed_blocks"); // legacy column, kept empty since V8
 
-        UserProfile existing = getProfile();
-        if (existing == null) {
-            return db.insert("user_profile", null, values);
-        } else {
-            return db.update("user_profile", values,
+        // Profile and commitments are saved together: a bad commitment leaves both unchanged.
+        db.beginTransaction();
+        try {
+            UserProfile existing = getProfile();
+            long result = existing == null ? db.insert("user_profile", null, values)
+                    : db.update("user_profile", values,
                     "profile_id = ?", new String[]{String.valueOf(existing.getProfileId())});
+            FixedCommitmentDao.replace(db, p.getFixedBlocks());
+            db.setTransactionSuccessful();
+            return result;
+        } finally {
+            db.endTransaction();
         }
     }
 }

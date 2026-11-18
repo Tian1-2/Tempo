@@ -28,7 +28,7 @@ public final class FixedScheduleCheck {
             Task gone = new Task("Old deleted task", "Study", 30, 2, 2, 0);
             gone.setTaskId((int) new TaskDao(helper).insertTask(gone));
             db.execSQL("UPDATE tasks SET status='DELETED' WHERE task_id=" + gone.getTaskId());
-            helper.onUpgrade(db, 5, 7);
+            helper.onUpgrade(db, 5, 8);
             List<com.tempo.app.scheduler.FixedBlocks.Entry> blocks =
                     com.tempo.app.scheduler.FixedBlocks.entries(profiles.getProfile().getFixedBlocks());
             check(blocks.size() == 3, "fixed events appended to the profile's existing commitments");
@@ -39,10 +39,24 @@ public final class FixedScheduleCheck {
             check(number("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name='fixed_events'") == 0, "fixed_events dropped after the move");
             check(number("SELECT archived FROM tasks WHERE task_id=" + gone.getTaskId()) == 1
                     && number("SELECT COUNT(*) FROM tasks WHERE status='DELETED'") == 0, "DELETED task becomes archived");
-            helper.onUpgrade(db, 4, 7); // integration V4 → V7 (and a second run) must be harmless
+            helper.onUpgrade(db, 4, 8); // integration V4 → V8 (and a second run) must be harmless
             check(com.tempo.app.scheduler.FixedBlocks.entries(profiles.getProfile().getFixedBlocks()).size() == 3, "upgrade is idempotent");
-            check(number("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'") == 5, "V7 indexes exist after upgrade");
+            check(number("SELECT COUNT(*) FROM sqlite_master WHERE type='index' AND name LIKE 'idx_%'") == 6, "V7/V8 indexes exist after upgrade");
             check(number("SELECT COUNT(*) FROM pragma_index_list('schedule_items') WHERE name='idx_schedule_date_status'") == 1, "schedule lookup by date is indexed");
+            // V8: commitments are rows of fixed_commitments; the old profile column stays empty.
+            check(number("SELECT COUNT(*) FROM fixed_commitments") == 3
+                    && number("SELECT COUNT(*) FROM user_profile WHERE fixed_blocks IS NOT NULL") == 0, "V8 moves profile text into fixed_commitments");
+            check(number("SELECT COUNT(*) FROM fixed_commitments WHERE day_of_week=2 AND start_minute=840 AND end_minute=960 AND title='COMP7506 lecture'") == 1,
+                    "lecture stored as a typed row");
+            UserProfile edited = profiles.getProfile();
+            edited.setFixedBlocks("Mon 09:00-10:00\tTutorial");
+            profiles.saveProfile(edited);
+            check(number("SELECT COUNT(*) FROM fixed_commitments") == 1
+                    && "Mon 09:00-10:00\tTutorial".equals(profiles.getProfile().getFixedBlocks()), "saving the profile replaces the commitments");
+            boolean rejected = false;
+            try { db.execSQL("INSERT INTO fixed_commitments(day_of_week,start_minute,end_minute) VALUES(7,600,660)"); }
+            catch (RuntimeException e) { rejected = true; }
+            check(rejected, "an invalid weekday is rejected by the table");
 
             Task task = new Task("Essay", "Study", 120, 3, 3, 0);
             task.setTaskId((int) new TaskDao(helper).insertTask(task));

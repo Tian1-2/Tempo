@@ -16,7 +16,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
      * and integration (V4 tasks.archived + user_profile.fixed_blocks). Upgrades therefore check the
      * actual schema instead of trusting the version number.
      */
-    private static final int DATABASE_VERSION = 7; // V7: indexes only
+    private static final int DATABASE_VERSION = 8; // V7: indexes; V8: fixed_commitments table
 
     public AppDatabaseHelper(Context context) {
         super(context, DATABASE_NAME, null, DATABASE_VERSION);
@@ -97,6 +97,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
         );
         com.tempo.app.learning.LearningStore.createTables(db);
         CategoryDao.createTable(db);
+        FixedCommitmentDao.createTable(db);
         createIndexes(db);
     }
 
@@ -117,6 +118,7 @@ public class AppDatabaseHelper extends SQLiteOpenHelper {
                 + "ELSE 'PENDING' END WHERE status='DELETED'");
         CategoryDao.createTable(db); // custom categories and colours (IF NOT EXISTS)
         moveFixedEventsToProfile(db);
+        FixedCommitmentDao.moveFromProfile(db); // V8: profile text → fixed_commitments rows
         createIndexes(db);
     }
 
