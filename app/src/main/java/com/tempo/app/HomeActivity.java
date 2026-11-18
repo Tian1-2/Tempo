@@ -21,6 +21,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 
 import com.tempo.app.home.DailyReview;
+import com.tempo.app.home.MorningReview;
 import com.tempo.app.model.ScheduleItem;
 import com.tempo.app.model.Task;
 import com.tempo.app.model.TaskFeedback;
@@ -48,12 +49,12 @@ import java.util.concurrent.Executors;
  * activity loads the data on a background thread, hands it to the page as JSON, and performs the
  * navigation the page asks for through the "Tempo" JavaScript bridge.
  *
- * Between 07:00 and 09:00 the first visit of the day opens on the morning review of yesterday.
+ * Between 07:00 and 09:00 the first visit of the day opens on the morning review of yesterday
+ * (see {@link MorningReview}). This is checked on every resume, not only when the activity is
+ * created, because Home usually stays alive in the background overnight.
  */
 public class HomeActivity extends AppCompatActivity {
     private static final int BG = Color.rgb(247, 248, 245);
-    private static final int MORNING_START_HOUR = 7;
-    private static final int MORNING_END_HOUR = 9;
     private static final String PREFS = "tempo_home";
     private static final String KEY_GREETED = "greetedDate";
     private static final String PAGE = "file:///android_asset/home/index.html";
@@ -173,8 +174,7 @@ public class HomeActivity extends AppCompatActivity {
         }
 
         @JavascriptInterface public void finishGreeting() {
-            main.post(() -> prefs().edit()
-                    .putString(KEY_GREETED, dateKey(startOfDay(System.currentTimeMillis()))).apply());
+            main.post(() -> markGreeted(System.currentTimeMillis()));
         }
     }
 
@@ -198,6 +198,8 @@ public class HomeActivity extends AppCompatActivity {
             main.post(() -> {
                 if (isFinishing() || data == null) return;
                 json = data;
+                // The review has now reached the page: don't pop it up again today.
+                if (greet) markGreeted(now);
                 push();
             });
         });
@@ -223,6 +225,8 @@ public class HomeActivity extends AppCompatActivity {
         d.put("dateText", format("MMMM d", now));
         d.put("longDate", format("EEEE, MMMM d", now));
         d.put("showReview", greet);
+        d.put("dayKey", dateKey(todayStart));
+        d.put("loadId", now);
         d.put("hasProfile", profile != null && profile.getWakeTime() != null
                 && profile.getSleepTime() != null && profile.getFocusDuration() > 0);
 
@@ -338,9 +342,12 @@ public class HomeActivity extends AppCompatActivity {
     private boolean shouldGreet(long now) {
         Calendar c = Calendar.getInstance();
         c.setTimeInMillis(now);
-        int hour = c.get(Calendar.HOUR_OF_DAY);
-        if (hour < MORNING_START_HOUR || hour >= MORNING_END_HOUR) return false;
-        return !dateKey(startOfDay(now)).equals(prefs().getString(KEY_GREETED, ""));
+        return MorningReview.due(c.get(Calendar.HOUR_OF_DAY), dateKey(startOfDay(now)),
+                prefs().getString(KEY_GREETED, ""));
+    }
+
+    private void markGreeted(long now) {
+        prefs().edit().putString(KEY_GREETED, dateKey(startOfDay(now))).apply();
     }
 
     private SharedPreferences prefs() { return getSharedPreferences(PREFS, MODE_PRIVATE); }

@@ -143,7 +143,9 @@
   "use strict";
   var bridge = window.Tempo; // Provided by HomeActivity; absent when previewing in a desktop browser.
   var CAT = { Study: "var(--study)", Work: "var(--work)", Life: "var(--life)" };
-  var showingReview = null;
+  var showingReview = false;
+  var reviewDay = null; // the day the review was opened on
+  var greetedLoad = null;
 
   function demo() {
     return {
@@ -309,7 +311,11 @@
   function render() {
     var d = data(), app = document.getElementById("app");
     if (!d) { app.innerHTML = ""; return; }
-    if (showingReview === null) showingReview = !!d.showReview;
+    // Re-checked on every refresh: Home stays open overnight, so the morning review must be able
+    // to appear on a resume, and a review left open must not carry over into the next day.
+    // Apply showReview once per load, so tapping "Start my day" re-renders the overview.
+    if (d.showReview && d.loadId !== greetedLoad) { greetedLoad = d.loadId; showingReview = true; reviewDay = d.dayKey; }
+    else if (showingReview && reviewDay && d.dayKey && reviewDay !== d.dayKey) showingReview = false;
     app.innerHTML = showingReview ? review(d) : overview(d);
     window.scrollTo(0, 0);
     animate(app);
@@ -319,7 +325,7 @@
     var el = e.target.closest("[data-act]");
     if (!el) return;
     var act = el.getAttribute("data-act");
-    if (act === "review") { showingReview = true; render(); }
+    if (act === "review") { var cur = data(); showingReview = true; reviewDay = cur && cur.dayKey; render(); }
     else if (act === "start") { showingReview = false; call("finishGreeting"); render(); }
     else if (act === "schedule") call("openSchedule");
     else if (act === "add") call("openAdd");
