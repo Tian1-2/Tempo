@@ -13,7 +13,7 @@ on-device SQLite database.
 | Area | What it does |
 |---|---|
 | **Home** | Greeting, today's progress, the next task and today's timeline. Between 07:00 and 09:00 the first visit of the day opens on yesterday's review (score from completion, recorded time and estimate accuracy). |
-| **Profile ("Your rhythm")** | Wake-up and bed time, meals, best focus time, focus/break length and daily task hours (0.5–12 h). |
+| **Profile** | Wake-up and bed time, meals, best focus time, focus/break length and daily task hours (0.5–12 h), plus weekly classes, categories, reminders, CSV export and links to History, Tasks and the Guide. A Save bar appears above the bottom bar only when something changed; leaving with unsaved changes asks first. |
 | **Fixed schedule** | Weekly classes and meetings (e.g. Tuesday 14:00–16:00), named and edited in Profile. Tasks are never planned on top of them; the schedule shows them as Fixed blocks and can jump to them. |
 | **Automatic planning** | Re-plans the next 7 days whenever a task, the profile or the fixed schedule changes, or a focus session ends. Keeps breaks between tasks, prefers one continuous block per task, respects deadlines and the daily limit, and never creates pieces shorter than 10 minutes (a 34-minute task with 25-minute focus becomes 17 + 17, not 25 + 9). If manually locked time exceeds what a task still needs, the old plan is kept and the task is named. |
 | **Stable plan** | Opening the schedule does not move suggestions you have already seen. A slot is moved only when it is more than 15 minutes past its start and still not done. |
@@ -21,8 +21,10 @@ on-device SQLite database.
 | **Categories** | Study, Work and Life to start with; add your own (e.g. Club), pick a colour, rename it (tasks and history follow). The colour marks the task on Home, the schedule and History. |
 | **Reminders** | A notification shortly before each planned task (at start, or 5/10/15 min before); tapping it opens the focus timer. Works after a reboot. |
 | **Focus timer** | Start, pause and resume; the session review records minutes, difficulty and whether the task is done. |
-| **Getting started** | On first launch Home shows three steps: set your routine, add weekly classes (optional), add a first task. |
-| **Navigation** | Schedule, Insights and History share Home's bottom bar (Schedule · Insights · + · History · Profile). Forms (Profile, Add task, Categories) use Back. |
+| **Getting started** | On first launch Home shows three steps: set your routine, add weekly classes (optional), add a first task. Home also has shortcuts to Tasks, History and the Guide. |
+| **Navigation** | Four top-level pages share one bottom bar: Home · Schedule · + · Insights · Profile. Home stays underneath; the other tabs replace each other, so Back returns to Home. Secondary pages (Tasks, History, Add task, Categories, Guide, Focus timer) have Back and no bar. |
+| **Tasks** | Every task in one page with To do / Done / Archived filters, category colour, estimate, deadline and status (Planned, Not planned, Overdue). Edit, archive, restore or delete from an action sheet. Opened from Home, Schedule (*Manage tasks*) or Profile. |
+| **Guide and tips** | *How Tempo works* explains every feature with numbered steps and a button to each page. Home offers a one-minute tour to new users, and Schedule, Insights, Profile and Tasks show a one-time tip card. |
 | **Dark mode** | Follows the phone's light/dark setting on every page, including the Home web page. |
 | **Export** | Profile → *Export CSV* saves every activity record as a spreadsheet file (no storage permission needed). |
 | **Insights** | Three tabs: Overview (7-day recorded time, completion, categories), Estimates (your estimate vs Tempo's prediction, MAE) and Patterns (days, difficulty, time of day, deadlines). Plus an editable activity history. |
@@ -54,7 +56,7 @@ If Gradle cannot find the SDK, create `local.properties` with `sdk.dir=/path/to/
 2. Optionally add your weekly classes under **Fixed weekly commitments** in Profile, then **Save**.
 3. Add a task with **+**. Tempo saves it and suggests a time right away.
 
-**Demo data (debug builds only):** on the Profile page, long-press the **Your rhythm** title and choose:
+**Demo data (debug builds only):** on the Profile page, long-press the **Profile** title and choose:
 
 - **General sample week** — a week of sample tasks, focus history, a weekly lecture and a custom "Club" category.
 - **Internship + evening classes** — the recording scenario in [DEMO-GUIDE.md](DEMO-GUIDE.md) (needs Monday 07:00–08:25; suggested emulator time 2026-11-23 08:00).
@@ -81,7 +83,8 @@ app/src/main/java/com/tempo/app/
   HomeActivity, SchedulePreviewActivity, AddTaskActivity,
   ProfileSettingsActivity, CategoriesActivity,
   FocusTimerActivity, TaskFeedbackActivity,
-  InsightsActivity, SessionHistoryActivity     screens
+  InsightsActivity, SessionHistoryActivity,
+  ManageTasksActivity, GuideActivity           screens
   scheduler/    ScheduleGenerator (pure Java planner), ScheduleService (7-day window),
                 AutoScheduler (background entry point), DefaultScheduleConstraints,
                 FixedBlocks (weekly commitments stored in the profile)
@@ -92,7 +95,7 @@ app/src/main/java/com/tempo/app/
   model/        Task, ScheduleItem, UserProfile, TaskFeedback, Category
   reminders/    alarm scheduling, notification and reboot receivers
   export/       CSV export of activity records
-  ui/           shared light/dark palette, bottom bar, category colour cache and dialogs
+  ui/           shared light/dark palette, bottom bar, tip cards, category colour cache and dialogs
 app/src/main/assets/home/   home page (HTML rendered in a WebView)
 checks/                     JVM + SQLite verification scripts
 ```
