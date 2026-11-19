@@ -98,3 +98,14 @@
 - **首次使用引导**：首页三步卡片（作息 → 每周课程〔可跳过〕→ 第一个任务），完成后自动消失。
 - **深色模式**：跟随系统。`Ui` 调色板改为可切换（`TempoApp` 在页面创建前选择），各页面的硬编码颜色改为调色板角色；Insights 和反馈页有 `values-night` 颜色；首页 HTML 用 CSS 变量切换。主要按钮在深色下为绿色。
 - **验证**：34 项单元测试（新增 CSV 3 项）、14 组检查（新增 V8 与改名断言）通过；模拟器上 V7 → V8 覆盖升级、八个页面深色截图、浅色回归、计时横幅、首次引导与跳过、CSV 实际导出到 Downloads、类别改名均验证。
+
+## 13. `adventure`：导航层级、引导与配色修正（2026-11-19）
+
+- **底部导航重做**：底栏统一为 Home · Schedule · ＋ · Insights · Profile，五格等宽，＋居中；原生页面的标签此前左对齐、与首页 HTML 底栏不一致，现已修正，并加了当前页下划线。
+- **页面层级**：Home 是根页面；Schedule、Insights、Profile 是一级页面，有底栏、无 Back，切换时互相替换，按返回键回到 Home。History、Tasks、Add task、Categories、Guide、计时器是二级页面，只有 Back、没有底栏。去掉了 Schedule 左上角的房子图标和 Insights、History 的 “‹ Home”。
+- **Profile**：作为一级页面显示底栏。“保存”不再浮在底栏位置，只在有改动时出现在底栏上方（“Unsaved changes · Save changes”）；未保存时离开会询问。保存后留在当前页；首次设置作息时保存后仍回到首页继续引导。新增 MORE：Activity history、All tasks、How to use Tempo。
+- **History**：从首页、Insights、Profile 进入。修复每行右侧的时长和 Done/Partial 标签被压成 1 像素、看不见的问题。
+- **使用引导**：新增 Guide 页（How Tempo works），说明底栏五个入口的用途，并按主题列出 14 项功能的步骤，每项都有直达按钮。首页首次显示 “Take the 1-minute tour” 卡片。Schedule、Insights、Profile、Tasks 首次进入时显示可关闭的提示卡，Guide 页底部可以 “Show page tips again”。
+- **Manage tasks 重做**：从系统对话框列表改为独立的 Tasks 页，有 To do / Done / Archived 三个筛选，每张卡片显示类别色条、类别、预估时长、截止日期和状态标签（Planned / Not planned / Overdue / Done / Archived）。点击后弹出操作面板：编辑、归档、恢复、永久删除。
+- **配色**：新增 sky、lilac、peach 三组辅助色（含深色版本）。首页加了 Tasks / History / Guide 三个彩色快捷卡；Insights 的完成率、估时、规律卡片，History 的统计块，Profile 各分区标题和按钮都用了不同颜色，不再整页都是薄荷绿。
+- **验证**：34 项单元测试、14 组检查通过；模拟器上逐个核对底栏切换、Profile 未保存提示与放弃、Tasks 页和操作面板、Guide 展开与跳转、History 行内容，深色模式也截图核对过。

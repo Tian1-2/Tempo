@@ -165,21 +165,17 @@ public class SchedulePreviewActivity extends AppCompatActivity {
     private void render() {
         int previousScroll = timelineScroll == null ? -1 : timelineScroll.getScrollY();
         content.removeAllViews();
+        // Schedule is a top-level tab: no Back or Home button here, the bottom bar leads everywhere.
         FrameLayout header = new FrameLayout(this);
-        HomeIconView back = new HomeIconView(this);
-        back.setOnClickListener(v -> {
-            Intent home = new Intent(this, HomeActivity.class);
-            home.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_SINGLE_TOP);
-            startActivity(home);
-            finish();
-        });
-        FrameLayout.LayoutParams backParams = new FrameLayout.LayoutParams(dp(48), dp(48), Gravity.START | Gravity.CENTER_VERTICAL);
-        backParams.leftMargin = 0;
-        header.addView(back, backParams);
-        TextView month = label(new SimpleDateFormat("MMMM yyyy", Locale.US).format(new Date(selectedDayMillis)),
-                19, INK, true);
-        month.setGravity(Gravity.CENTER);
-        header.addView(month, new FrameLayout.LayoutParams(-2, -1, Gravity.CENTER));
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.setGravity(Gravity.CENTER_VERTICAL);
+        titles.addView(label("Schedule", 26, INK, true));
+        titles.addView(label(new SimpleDateFormat("MMMM yyyy", Locale.US).format(new Date(selectedDayMillis)),
+                13, MUTED, false));
+        FrameLayout.LayoutParams titleParams = new FrameLayout.LayoutParams(-2, -1, Gravity.START);
+        titleParams.leftMargin = dp(22);
+        header.addView(titles, titleParams);
         if (selectedDayMillis != startOfDay(System.currentTimeMillis())) {
             // Jump back to today (was the "Today" button of the old bottom bar).
             TextView today = label("Today", 13, Ui.GREEN, true);
@@ -192,8 +188,19 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             todayParams.rightMargin = dp(16);
             header.addView(today, todayParams);
         }
-        content.addView(header, new LinearLayout.LayoutParams(-1, dp(52)));
+        content.addView(header, new LinearLayout.LayoutParams(-1, dp(60)));
         addTimerBanner();
+        View tip = com.tempo.app.ui.Tips.card(this, com.tempo.app.ui.Tips.SCHEDULE, "Getting around your week",
+                Ui.SKY, Ui.SKY_SOFT,
+                "Tap a day in the week strip to see its plan.",
+                "Tap a coloured block to move its time, edit the task or start the focus timer.",
+                "Striped grey blocks are your weekly classes; add them in Profile.");
+        if (tip != null) {
+            tip.setOnClickListener(null);
+            LinearLayout.LayoutParams tipParams = new LinearLayout.LayoutParams(-1, -2);
+            tipParams.leftMargin = dp(16); tipParams.rightMargin = dp(16); tipParams.topMargin = dp(8);
+            content.addView(tip, tipParams);
+        }
         spacer(14);
         addWeekStrip();
         spacer(13);
@@ -227,15 +234,20 @@ public class SchedulePreviewActivity extends AppCompatActivity {
         List<ScheduleGenerator.Interval> busy = FixedBlocks.intervals(weekly, selectedDayMillis);
 
         Button manage = new Button(this);
-        manage.setText("Manage tasks");
+        manage.setText("☰   Manage tasks");
         manage.setAllCaps(false);
         manage.setTextSize(15);
         manage.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
-        manage.setTextColor(Color.WHITE);
+        manage.setTextColor(Ui.LILAC);
+        manage.setStateListAnimator(null);
         manage.setBackgroundTintList(null);
         manage.setBackground(new android.graphics.drawable.RippleDrawable(
-                android.content.res.ColorStateList.valueOf(0x40FFFFFF), shape(com.tempo.app.ui.Ui.ACTION, 14), null));
-        manage.setOnClickListener(v -> showTaskList());
+                android.content.res.ColorStateList.valueOf(Ui.LILAC), shape(Ui.LILAC_SOFT, 14), null));
+        manage.setOnClickListener(v -> {
+            Intent tasksPage = new Intent(this, ManageTasksActivity.class);
+            tasksPage.putExtra("selectedDayMillis", selectedDayMillis);
+            startActivity(tasksPage);
+        });
         LinearLayout actions = new LinearLayout(this);
         actions.setGravity(Gravity.CENTER_VERTICAL);
         actions.setPadding(dp(22), 0, dp(22), dp(10));
@@ -753,42 +765,6 @@ public class SchedulePreviewActivity extends AppCompatActivity {
             }
             public void onError(Exception error) { showEditError(error.getMessage()); }
         };
-    }
-
-    private void showTaskList() {
-        RepositoryProvider.getTaskRepository().getManageableTasks(new TaskRepository.Callback<List<Task>>() {
-            public void onSuccess(List<Task> list) {
-                if (isFinishing() || isDestroyed()) return;
-                String[] names = new String[list.size()];
-                for (int i = 0; i < names.length; i++) {
-                    Task task = list.get(i);
-                    String state = task.isArchived() ? "Archived" : "COMPLETED".equals(task.getStatus()) ? "Completed"
-                            : task.hasFutureSlot() ? "Scheduled" : "Unscheduled";
-                    names[i] = state + "  ·  " + task.getTitle();
-                }
-                new AlertDialog.Builder(SchedulePreviewActivity.this).setTitle("Manage tasks")
-                        .setItems(names, (d,i) -> showTaskActions(list.get(i)))
-                        .setPositiveButton("Add task", (d,w) -> addTaskForSelectedDay())
-                        .setNegativeButton("Close", null).show();
-            }
-            public void onError(Exception error) { showEditError(error.getMessage()); }
-        });
-    }
-
-    private void showTaskActions(Task task) {
-        if (task.isArchived()) {
-            new AlertDialog.Builder(this).setTitle(task.getTitle())
-                    .setItems(new String[]{"Restore task", "Delete permanently…"}, (d,i) -> {
-                        if (i == 0) RepositoryProvider.getTaskRepository().restoreTask(task.getTaskId(), afterTaskChange());
-                        else confirmDeleteTask(task);
-                    }).setNegativeButton("Close", null).show();
-            return;
-        }
-        new AlertDialog.Builder(this).setTitle(task.getTitle())
-                .setItems(new String[]{"Edit task", "Archive or delete…"}, (d,i) -> {
-                    if (i == 0) editTaskInfo(task);
-                    else confirmDeleteTask(task);
-                }).setNegativeButton("Close", null).show();
     }
 
     private String categoryName(String category) {

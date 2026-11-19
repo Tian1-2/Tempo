@@ -60,10 +60,9 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         ScrollView scroll=new ScrollView(this);scroll.setBackgroundColor(Ui.BG);scroll.setVerticalScrollBarEnabled(false);scroll.setFillViewport(true);
         content=new LinearLayout(this);content.setOrientation(LinearLayout.VERTICAL);content.setPadding(dp(20),dp(8),dp(20),dp(28));content.setClipToPadding(false);
         scroll.addView(content);
-        // The shared bottom bar sits under the list (same bar as Home, Schedule and Insights).
+        // History is a secondary page (opened from Home, Insights or Profile): Back, no bottom bar.
         LinearLayout page=new LinearLayout(this);page.setOrientation(LinearLayout.VERTICAL);page.setBackgroundColor(Ui.BG);
         page.addView(scroll,new LinearLayout.LayoutParams(-1,0,1));
-        page.addView(com.tempo.app.ui.BottomNav.create(this,com.tempo.app.ui.BottomNav.Tab.HISTORY,null));
         setContentView(page);
         WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightStatusBars(!com.tempo.app.ui.Ui.isDark());
         WindowCompat.getInsetsController(getWindow(),page).setAppearanceLightNavigationBars(!com.tempo.app.ui.Ui.isDark());
@@ -75,7 +74,7 @@ public final class SessionHistoryActivity extends AppCompatActivity {
     }
     private void header() {
         content.removeAllViews();
-        content.addView(Ui.backRow(this, "Home", v -> { if (!saving) finish(); }));
+        content.addView(Ui.backRow(this, "Back", v -> { if (!saving) finish(); }));
         Ui.space(content, 6);
         content.addView(Ui.title(this, "History"));
         Ui.space(content, 4);
@@ -160,19 +159,29 @@ public final class SessionHistoryActivity extends AppCompatActivity {
     }
 
     private void summary(LearningStore.History history) {
-        LinearLayout card = Ui.card(this);
-        card.setOrientation(LinearLayout.HORIZONTAL);
-        card.setPadding(dp(8), dp(16), dp(8), dp(16));
-        card.addView(stat(String.valueOf(history.count), history.count == 1 ? "record" : "records"), new LinearLayout.LayoutParams(0, -2, 1));
-        card.addView(stat(DailyReview.formatMinutes(history.weekMinutes), "last 7 days"), new LinearLayout.LayoutParams(0, -2, 1));
-        card.addView(stat(String.valueOf(history.finished), history.finished == 1 ? "task finished" : "tasks finished"), new LinearLayout.LayoutParams(0, -2, 1));
+        // Three tinted tiles instead of one white card, so the numbers are told apart at a glance.
+        LinearLayout card = new LinearLayout(this);
+        card.addView(stat(String.valueOf(history.count), history.count == 1 ? "record" : "records", Ui.SKY_SOFT, Ui.SKY), tile(false));
+        card.addView(stat(DailyReview.formatMinutes(history.weekMinutes), "last 7 days", Ui.MINT_SOFT, Ui.GREEN), tile(true));
+        card.addView(stat(String.valueOf(history.finished), history.finished == 1 ? "task finished" : "tasks finished", Ui.LILAC_SOFT, Ui.LILAC), tile(true));
         content.addView(card);
     }
 
-    private View stat(String value, String label) {
+    private LinearLayout.LayoutParams tile(boolean gap) {
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0, -2, 1);
+        if (gap) params.leftMargin = dp(8);
+        return params;
+    }
+
+    private View stat(String value, String label, int surface, int accent) {
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        box.setGravity(Gravity.CENTER_HORIZONTAL);
+        box.setPadding(dp(12), dp(14), dp(12), dp(14));
+        box.setBackground(Ui.round(surface, dp(18)));
+        View bar = new View(this);
+        bar.setBackground(Ui.round(accent, dp(2)));
+        box.addView(bar, new LinearLayout.LayoutParams(dp(18), dp(4)));
+        Ui.space(box, 10);
         box.addView(Ui.text(this, value, 18, Ui.INK, true));
         Ui.space(box, 2);
         box.addView(Ui.text(this, label, 12, Ui.MUTED, false));
@@ -212,12 +221,19 @@ public final class SessionHistoryActivity extends AppCompatActivity {
         right.setOrientation(LinearLayout.VERTICAL);
         right.setGravity(Gravity.END);
         right.setPadding(dp(10), 0, 0, 0);
-        right.addView(Ui.text(this, row.minutes == null ? "No time" : DailyReview.formatMinutes(row.minutes), 15,
-                row.minutes == null ? Ui.MUTED : Ui.INK, true));
+        // Explicit wrap-content sizes: with the default (match-parent) children this column
+        // collapsed to one pixel and the minutes and Done/Partial chip disappeared.
+        TextView minutesView = Ui.text(this, row.minutes == null ? "No time" : DailyReview.formatMinutes(row.minutes), 15,
+                row.minutes == null ? Ui.MUTED : Ui.INK, true);
+        LinearLayout.LayoutParams wrapEnd = new LinearLayout.LayoutParams(-2, -2);
+        wrapEnd.gravity = Gravity.END;
+        right.addView(minutesView, wrapEnd);
         Ui.space(right, 4);
+        LinearLayout.LayoutParams chipEnd = new LinearLayout.LayoutParams(-2, -2);
+        chipEnd.gravity = Gravity.END;
         right.addView(Ui.chip(this, completed ? "Done" : "Partial", completed ? Ui.MINT_SOFT : Ui.WARM_SOFT,
-                completed ? Ui.GREEN : Ui.WARM));
-        line.addView(right);
+                completed ? Ui.GREEN : Ui.WARM), chipEnd);
+        line.addView(right, new LinearLayout.LayoutParams(-2, -2));
         return line;
     }
 

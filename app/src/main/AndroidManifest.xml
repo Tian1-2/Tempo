@@ -21,6 +21,8 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Tempo">
         <activity android:name=".CategoriesActivity" android:exported="false" />
+        <activity android:name=".ManageTasksActivity" android:exported="false" />
+        <activity android:name=".GuideActivity" android:exported="false" />
         <receiver android:name=".reminders.ReminderReceiver" android:exported="false" />
         <receiver android:name=".reminders.BootReceiver" android:exported="true">
             <intent-filter>

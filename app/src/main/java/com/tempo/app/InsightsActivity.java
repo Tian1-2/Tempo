@@ -94,6 +94,16 @@ public class InsightsActivity extends AppCompatActivity {
         scroll = findViewById(R.id.insights_scroll);
         ((android.widget.LinearLayout) root).addView(com.tempo.app.ui.BottomNav.create(this,
                 com.tempo.app.ui.BottomNav.Tab.INSIGHTS, null));
+        View tip = com.tempo.app.ui.Tips.card(this, com.tempo.app.ui.Tips.INSIGHTS, "Reading your insights",
+                Ui.WARM, Ui.PEACH_SOFT,
+                "Overview, Estimates and Patterns are three views of the same records.",
+                "Tap ⓘ at the top to see what each number means.",
+                "Worked without the timer? Use + Log activity at the bottom of Overview.");
+        if (tip != null) {
+            android.widget.LinearLayout.LayoutParams tipParams = new android.widget.LinearLayout.LayoutParams(-1, -2);
+            tipParams.leftMargin = dp(20); tipParams.rightMargin = dp(20); tipParams.topMargin = dp(8); tipParams.bottomMargin = dp(4);
+            ((android.widget.LinearLayout) root).addView(tip, ((android.widget.LinearLayout) root).indexOfChild(scroll), tipParams);
+        }
 
         tabs = findViewById(R.id.insights_tabs);
         ViewCompat.setAccessibilityHeading(findViewById(R.id.insights_title), true);
@@ -174,13 +184,8 @@ public class InsightsActivity extends AppCompatActivity {
 
     private void buildToolbar() {
         LinearLayout toolbar = findViewById(R.id.insights_toolbar);
-        InsightsIcon back = iconButton(InsightsIcon.Kind.BACK, R.string.insights_back);
-        back.setOnClickListener(v -> finish());
-        toolbar.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView home = label(getString(R.string.insights_home), 14, Ui.MUTED, false);
-        home.setGravity(Gravity.CENTER_VERTICAL);
-        home.setOnClickListener(v -> finish());
-        toolbar.addView(home, new LinearLayout.LayoutParams(0, -2, 1));
+        // Insights is a top-level tab: no Back here, the bottom bar leads everywhere.
+        toolbar.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1));
         InsightsIcon info = iconButton(InsightsIcon.Kind.INFO, R.string.insights_definitions);
         info.setOnClickListener(v -> showDefinitions());
         toolbar.addView(info, new LinearLayout.LayoutParams(dp(48), dp(48)));
@@ -267,7 +272,7 @@ public class InsightsActivity extends AppCompatActivity {
         String taskLabel = stats.taskCount == 0 ? "No tasks yet" : stats.completedTasks + " of "
                 + count(stats.taskCount, "task", "tasks");
         LinearLayout completed = metric(completion, "Overall completion",
-                taskLabel + "\nAll history", Ui.FIXED_SURFACE, 33);
+                taskLabel + "\nAll history", Ui.SKY_SOFT, 33);
         pair(content, recorded, completed);
         gap(content, 20);
 
@@ -288,7 +293,7 @@ public class InsightsActivity extends AppCompatActivity {
         }
         gap(content, 20);
 
-        LinearLayout categories = panel(Ui.MINT_SOFT, false);
+        LinearLayout categories = panel(Ui.CARD, true);
         heading(categories, "Where time went");
         if (stats.categories.isEmpty()) {
             categories.addView(caption(getString(R.string.insights_categories_empty)));
@@ -320,7 +325,7 @@ public class InsightsActivity extends AppCompatActivity {
         heading(content, "Estimate accuracy");
         content.addView(caption(count(learning.evaluatedTasks, "evaluated task", "evaluated tasks") + " · all history"));
         gap(content, 12);
-        LinearLayout comparison = panel(Ui.MINT_SOFT, false);
+        LinearLayout comparison = panel(Ui.SKY_SOFT, false);
         if (learning.evaluatedTasks == 0) {
             heading(comparison, "No comparisons yet");
             comparison.addView(caption("Record a task through completion to compare its original estimates with the time you saved."));
@@ -399,7 +404,7 @@ public class InsightsActivity extends AppCompatActivity {
     private void showPatterns() {
         eyebrow(content, "Last 7 days");
         gap(content, 10);
-        LinearLayout rhythm = panel(Ui.MINT_SOFT, false);
+        LinearLayout rhythm = panel(Ui.PEACH_SOFT, false);
         heading(rhythm, "Your rhythm");
         rhythm.addView(figure(stats.activeDays + " / 7", "days with recorded time", Ui.INK, 33));
         gap(rhythm, 14);

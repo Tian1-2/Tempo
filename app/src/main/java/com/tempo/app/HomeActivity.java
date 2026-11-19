@@ -180,6 +180,18 @@ public class HomeActivity extends AppCompatActivity {
             main.post(() -> { prefs().edit().putBoolean(KEY_SKIPPED_CLASSES, true).apply(); load(); });
         }
 
+        @JavascriptInterface public void openTasks() {
+            main.post(() -> startActivity(new Intent(HomeActivity.this, ManageTasksActivity.class)));
+        }
+
+        @JavascriptInterface public void openGuide() {
+            main.post(() -> startActivity(new Intent(HomeActivity.this, GuideActivity.class)));
+        }
+
+        @JavascriptInterface public void dismissTour() {
+            main.post(() -> { com.tempo.app.ui.Tips.markSeen(HomeActivity.this, com.tempo.app.ui.Tips.TOUR); load(); });
+        }
+
         @JavascriptInterface public void finishGreeting() {
             main.post(() -> markGreeted(System.currentTimeMillis()));
         }
@@ -253,6 +265,7 @@ public class HomeActivity extends AppCompatActivity {
         setup.put("classes", hasClasses || prefs().getBoolean(KEY_SKIPPED_CLASSES, false));
         setup.put("task", hasTask);
         d.put("setup", setup);
+        d.put("tour", !com.tempo.app.ui.Tips.seen(this, com.tempo.app.ui.Tips.TOUR));
 
         JSONObject t = new JSONObject();
         t.put("planned", today.tasksToGo + today.finishedOnDay);

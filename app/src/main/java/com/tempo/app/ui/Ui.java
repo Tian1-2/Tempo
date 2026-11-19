@@ -23,6 +23,8 @@ public final class Ui {
     // light and dark palettes, so every page reads the current values when it builds its views.
     public static int BG, CARD, INK, MUTED, LINE, MINT, MINT_SOFT, GREEN, WARM, WARM_SOFT, RED;
     public static int STUDY, WORK, LIFE, FIXED_SURFACE, FIXED_BG, FIXED_INK;
+    /** Extra accents so pages are not all mint: sky (data, history), lilac (tasks, guide), peach. */
+    public static int SKY, SKY_SOFT, LILAC, LILAC_SOFT, PEACH_SOFT;
     /** Filled buttons (white text on it): dark ink by day, green at night. */
     public static int ACTION;
     /** Neutral surface for completed / inactive blocks and toggles. */
@@ -49,6 +51,8 @@ public final class Ui {
             WORK = Color.rgb(76, 111, 181); LIFE = Color.rgb(208, 138, 62); FIXED_SURFACE = Color.rgb(239, 245, 242);
             FIXED_BG = Color.rgb(238, 240, 243); FIXED_INK = Color.rgb(96, 106, 120);
             ACTION = Color.rgb(30, 48, 52); SUBTLE = Color.rgb(232, 237, 233);
+            SKY = Color.rgb(62, 124, 177); SKY_SOFT = Color.rgb(230, 240, 248); LILAC = Color.rgb(122, 91, 176);
+            LILAC_SOFT = Color.rgb(240, 234, 248); PEACH_SOFT = Color.rgb(253, 238, 227);
         } else {
             BG = Color.rgb(18, 24, 22); CARD = Color.rgb(28, 36, 34); INK = Color.rgb(230, 238, 235);
             MUTED = Color.rgb(154, 171, 167); LINE = Color.rgb(46, 56, 53); MINT = Color.rgb(47, 92, 72);
@@ -57,6 +61,8 @@ public final class Ui {
             WORK = Color.rgb(125, 155, 224); LIFE = Color.rgb(224, 160, 96); FIXED_SURFACE = Color.rgb(31, 40, 38);
             FIXED_BG = Color.rgb(36, 42, 49); FIXED_INK = Color.rgb(154, 166, 181);
             ACTION = Color.rgb(52, 126, 91); SUBTLE = Color.rgb(40, 50, 47);
+            SKY = Color.rgb(141, 184, 224); SKY_SOFT = Color.rgb(31, 44, 56); LILAC = Color.rgb(185, 160, 230);
+            LILAC_SOFT = Color.rgb(42, 36, 54); PEACH_SOFT = Color.rgb(53, 40, 31);
         }
     }
 
@@ -253,6 +259,31 @@ public final class Ui {
         row.addView(text);
         return row;
     }
+
+    /** A rounded square with a short glyph (emoji or symbol) on a tinted background. */
+    public static TextView badge(Context c, String glyph, int background, int color) {
+        TextView view = text(c, glyph, 17, color, true);
+        view.setGravity(Gravity.CENTER);
+        view.setBackground(round(background, dp(c, 12)));
+        view.setLayoutParams(new LinearLayout.LayoutParams(dp(c, 38), dp(c, 38)));
+        return view;
+    }
+
+    /** Section label with a small coloured dot, so sections are told apart by colour as well as text. */
+    public static LinearLayout sectionLabel(Context c, String label, int color) {
+        LinearLayout row = new LinearLayout(c);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        View dot = new View(c);
+        dot.setBackground(round(color, dp(c, 4)));
+        LinearLayout.LayoutParams dotParams = new LinearLayout.LayoutParams(dp(c, 8), dp(c, 8));
+        dotParams.rightMargin = dp(c, 8);
+        row.addView(dot, dotParams);
+        row.addView(eyebrow(c, label, color));
+        return row;
+    }
+
+    /** Text on a filled accent (step numbers, chips): white by day, dark at night when accents are light. */
+    public static int onAccent() { return dark ? BG : Color.WHITE; }
 
     public static int categoryColor(String category) { return Categories.color(category); }
 

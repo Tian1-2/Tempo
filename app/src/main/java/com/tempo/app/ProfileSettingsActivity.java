@@ -43,7 +43,7 @@ import com.tempo.app.scheduler.DefaultScheduleConstraints;
 import java.util.Locale;
 
 /** Profile settings: every value can be dragged on a slider or typed into its field. */
-public class ProfileSettingsActivity extends AppCompatActivity {
+public class ProfileSettingsActivity extends AppCompatActivity implements com.tempo.app.ui.BottomNav.Guard {
     /** The system "save as" screen: no storage permission needed, the user picks where the file goes. */
     private final androidx.activity.result.ActivityResultLauncher<String> exportCsv = registerForActivityResult(
             new androidx.activity.result.contract.ActivityResultContracts.CreateDocument("text/csv"), uri -> {
@@ -74,6 +74,9 @@ public class ProfileSettingsActivity extends AppCompatActivity {
     private UserProfile profile;
     private LinearLayout body;
     private TextView save;
+    private View saveBar;
+    /** True once the person changed something that only applies after Save. */
+    private boolean dirty;
     private DayStripView strip;
     private LinearLayout dayCard;
     private TextView summary;
@@ -145,34 +148,32 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         getWindow().getDecorView().setSystemUiVisibility(com.tempo.app.ui.Ui.isDark() ? 0 : View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);
         getWindow().setNavigationBarColor(BG);
 
-        FrameLayout root = new FrameLayout(this);
+        // Profile is a top-level tab: page = scrolling settings, a Save bar that appears only when
+        // something changed, then the shared bottom bar. Save never covers the bar.
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
         root.setBackgroundColor(BG);
         ScrollView scroll = new ScrollView(this);
         scroll.setVerticalScrollBarEnabled(false);
         body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(12), dp(20), dp(110));
+        body.setPadding(dp(20), dp(20), dp(20), dp(24));
         scroll.addView(body);
-        root.addView(scroll, new FrameLayout.LayoutParams(-1, -1));
+        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(root);
         com.tempo.app.ui.Ui.fitSystemBars(this);
 
-        LinearLayout navigation = new LinearLayout(this);
-        navigation.setGravity(Gravity.CENTER_VERTICAL);
-        navigation.setTranslationX(-dp(14));
-        BackChevronView back = new BackChevronView(this, "Back");
-        back.setOnClickListener(v -> finish());
-        navigation.addView(back, new LinearLayout.LayoutParams(dp(44), dp(44)));
-        TextView backLabel = text("Back", 14, MUTED, false);
-        backLabel.setOnClickListener(v -> finish());
-        navigation.addView(backLabel);
-        body.addView(navigation, new LinearLayout.LayoutParams(-1, dp(44)));
-        space(body, 6);
-        TextView heading = text("Your rhythm", 30, INK, true);
+        TextView heading = text("Profile", 30, INK, true);
         body.addView(heading);
         space(body, 4);
-        body.addView(text("Tempo plans your day around these. Drag a slider or tap a value to type it.", 14, MUTED, false));
-        space(body, 18);
+        body.addView(text("Your routine, weekly classes, reminders and data. Tempo plans your days around these.", 14, MUTED, false));
+        space(body, 14);
+        View tip = com.tempo.app.ui.Tips.card(this, com.tempo.app.ui.Tips.PROFILE, "Set it once, Tempo does the rest",
+                Ui.LILAC, Ui.LILAC_SOFT,
+                "Drag a slider or tap a value to type it. Save appears when you change something.",
+                "Add classes under Fixed weekly commitments so Tempo never plans over them.",
+                "Reminders, categories and CSV export are further down.");
+        if (tip != null) { body.addView(tip); space(body, 14); }
 
         profileState = text("Loading your routine…", 14, MUTED, false);
         body.addView(profileState);
@@ -213,33 +214,33 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         rest = new Field(false, 0, 30, 1, 5);
         capacity = new Field(false, true, 30, 720, 15, 240);
 
-        section("ROUTINE");
+        section("ROUTINE", Ui.WARM);
         LinearLayout routine = card();
         addField(routine, wake, "Wake up", null, null);
         addField(routine, sleep, "Bedtime", "Must be later than wake-up", null);
         body.addView(routine);
 
-        section("MEALS · " + DefaultScheduleConstraints.MEAL_MINUTES + " MIN EACH");
+        section("MEALS · " + DefaultScheduleConstraints.MEAL_MINUTES + " MIN EACH", Ui.LIFE);
         LinearLayout meals = card();
         addField(meals, breakfast, "Breakfast", null, null);
         addField(meals, lunch, "Lunch", null, null);
         addField(meals, dinner, "Dinner", null, null);
         body.addView(meals);
 
-        section("FOCUS");
+        section("FOCUS", GREEN);
         LinearLayout focusCard = card();
         addField(focusCard, start, "Best focus time", "Hard tasks go into the " + DefaultScheduleConstraints.PRODUCTIVE_MINUTES / 60 + " h after this", null);
         addField(focusCard, focus, "Focus session", "One block of deep work", "min");
         addField(focusCard, rest, "Break", "Rest between focus blocks", "min");
         addField(focusCard, capacity, "Daily task time", "Most Tempo will plan per day", "h");
         body.addView(focusCard);
-        space(body, 22);
+        section("WEEKLY CLASSES", Ui.FIXED_INK);
         commitments = card();
         commitments.setPadding(dp(16), dp(18), dp(16), dp(16));
         body.addView(commitments);
         drawCommitments();
 
-        section("CATEGORIES");
+        section("CATEGORIES", Ui.LILAC);
         LinearLayout categoryCard = card();
         categoryCard.setPadding(dp(16), dp(14), dp(16), dp(14));
         categoryCard.addView(text("Task labels and colours", 15, INK, true));
@@ -248,11 +249,13 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 13, MUTED, false));
         space(categoryCard, 10);
         TextView editCategories = Ui.secondary(this, "Edit categories");
+        editCategories.setBackground(Ui.round(Ui.LILAC_SOFT, dp(16)));
+        editCategories.setTextColor(Ui.LILAC);
         editCategories.setOnClickListener(v -> startActivity(new Intent(this, CategoriesActivity.class)));
         categoryCard.addView(editCategories);
         body.addView(categoryCard);
 
-        section("YOUR DATA");
+        section("YOUR DATA", Ui.SKY);
         LinearLayout dataCard = card();
         dataCard.setPadding(dp(16), dp(14), dp(16), dp(14));
         dataCard.addView(text("Export to a spreadsheet", 15, INK, true));
@@ -260,34 +263,51 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         dataCard.addView(text("Saves every activity record (date, task, category, minutes, outcome) as a CSV file "
                 + "you can open in Excel or Google Sheets. Everything else stays on this phone.", 13, MUTED, false));
         space(dataCard, 10);
-        TextView export = Ui.secondary(this, "Export CSV");
+        TextView export = Ui.secondary(this, "⬇  Export CSV");
+        export.setBackground(Ui.round(Ui.SKY_SOFT, dp(16)));
+        export.setTextColor(Ui.SKY);
         export.setOnClickListener(v -> exportCsv.launch("tempo-export-"
                 + new java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(new java.util.Date()) + ".csv"));
         dataCard.addView(export);
         body.addView(dataCard);
 
-        section("REMINDERS");
+        section("REMINDERS", Ui.WARM);
         reminderCard = card();
         reminderCard.setPadding(dp(16), dp(10), dp(16), dp(14));
         body.addView(reminderCard);
         renderReminders();
+
+        section("MORE", Ui.MUTED);
+        LinearLayout more = card();
+        more.setPadding(dp(8), dp(6), dp(8), dp(6));
+        more.addView(moreRow("🕘", "Activity history", "Every recorded session; tap one to correct it",
+                Ui.SKY_SOFT, Ui.SKY, () -> startActivity(new Intent(this, SessionHistoryActivity.class))));
+        more.addView(moreRow("☰", "All tasks", "Edit, archive, restore or delete",
+                Ui.LILAC_SOFT, Ui.LILAC, () -> startActivity(new Intent(this, ManageTasksActivity.class))));
+        more.addView(moreRow("📖", "How to use Tempo", "Step-by-step guide to every feature",
+                Ui.PEACH_SOFT, Ui.WARM, () -> startActivity(new Intent(this, GuideActivity.class))));
+        body.addView(more);
 
         // Demo seeding is available only through a hidden debug gesture.
         if ((getApplicationInfo().flags & android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0) {
             heading.setOnLongClickListener(v -> { confirmSampleData(); return true; });
         }
 
-        save = text("Save", 16, Color.WHITE, true);
+        LinearLayout bar = new LinearLayout(this);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(20), dp(10), dp(20), 0);
+        TextView unsaved = text("Unsaved changes", 13, Ui.WARM, true);
+        bar.addView(unsaved, new LinearLayout.LayoutParams(0, -2, 1));
+        save = text("Save", 15, Color.WHITE, true);
         save.setGravity(Gravity.CENTER);
-        GradientDrawable saveBg = new GradientDrawable();
-        saveBg.setColor(com.tempo.app.ui.Ui.ACTION);
-        saveBg.setCornerRadius(dp(16));
-        save.setBackground(saveBg);
-        save.setElevation(dp(6));
+        save.setPadding(dp(22), 0, dp(22), 0);
+        save.setBackground(Ui.round(com.tempo.app.ui.Ui.ACTION, dp(14)));
         save.setOnClickListener(v -> save());
-        FrameLayout.LayoutParams saveParams = new FrameLayout.LayoutParams(-1, dp(56), Gravity.BOTTOM);
-        saveParams.setMargins(dp(20), 0, dp(20), dp(20));
-        root.addView(save, saveParams);
+        bar.addView(save, new LinearLayout.LayoutParams(-2, dp(46)));
+        saveBar = bar;
+        saveBar.setVisibility(View.GONE);
+        root.addView(saveBar, new LinearLayout.LayoutParams(-1, -2));
+        root.addView(com.tempo.app.ui.BottomNav.create(this, com.tempo.app.ui.BottomNav.Tab.PROFILE, null));
         refreshSummary();
 
         RepositoryProvider.getUserProfileRepository().getProfile(new TaskRepository.Callback<UserProfile>() {
@@ -297,12 +317,15 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                     profileState.setText("No routine saved yet. Enter your own values or apply a recommended starting point, then save to enable planning.");
                     recommended.setVisibility(View.VISIBLE);
                     save.setText("Save routine");
+                    ((TextView) ((LinearLayout) saveBar).getChildAt(0)).setText("Not saved yet");
+                    saveBar.setVisibility(View.VISIBLE);
                     refreshSummary();
                     return;
                 }
                 profileState.setText("Your saved routine · edit any value below.");
                 recommended.setVisibility(View.GONE);
                 save.setText("Save changes");
+                if (!dirty) saveBar.setVisibility(View.GONE);
                 fixedBlocks = value.getFixedBlocks();
                 drawCommitments();
                 load(wake, value.getWakeTime()); load(sleep, value.getSleepTime());
@@ -353,6 +376,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 java.util.List<String> rows = FixedBlocks.lines(fixedBlocks);
                 rows.remove(entry.row);
                 fixedBlocks = FixedBlocks.join(rows);
+                markDirty();
                 drawCommitments();
             });
             row.addView(remove);
@@ -411,6 +435,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
             try {
                 fixedBlocks = FixedBlocks.save(fixedBlocks, original, day.getSelectedItemPosition(),
                         times[0], times[1], name.getText().toString());
+                markDirty();
                 drawCommitments();
                 dialog.dismiss();
             } catch (IllegalArgumentException invalid) { error.setText(invalid.getMessage()); }
@@ -424,6 +449,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         dinner.set(18 * 60 + 30, true); start.set(9 * 60, true);
         focus.set(25, true); rest.set(5, true); capacity.set(240, true);
         profileState.setText("Recommended values applied · review them, then tap Save routine.");
+        markDirty();
         refreshSummary();
     }
 
@@ -499,6 +525,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 field.syncing = true;
                 input.setText(field.format(field.value));
                 field.syncing = false;
+                markDirty();
                 refreshSummary();
             }
             @Override public void onStartTrackingTouch(SeekBar seekBar) { input.clearFocus(); }
@@ -511,6 +538,7 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 if (field.syncing) return;
                 Integer parsed = field.parse(s.toString());
                 if (parsed != null) field.set(parsed, false);
+                if (field.input != null && field.input.hasFocus()) markDirty();
             }
         });
         input.setOnFocusChangeListener((v, hasFocus) -> {
@@ -574,14 +602,16 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         save.setText("Saving…");
         RepositoryProvider.getUserProfileRepository().saveProfile(updated, new TaskRepository.Callback<Long>() {
             @Override public void onSuccess(Long id) {
+                boolean firstSave = profile == null;
                 profile = updated;
                 // The routine changed, so re-plan today before leaving.
                 AutoScheduler.replan(ProfileSettingsActivity.this, new AutoScheduler.Listener() {
-                    @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) { done("Saved · today's plan updated"); }
+                    @Override public void onScheduled(com.tempo.app.scheduler.ScheduleGenerator.Result result) {
+                        saved(firstSave, "Saved · your plan is updated"); }
                     @Override public void onFailed(String message) { planningFailure = message;
                         if (!isFinishing() && !isDestroyed()) new android.app.AlertDialog.Builder(ProfileSettingsActivity.this)
                                 .setTitle("Routine saved · plan unchanged").setMessage(message)
-                                .setCancelable(false).setPositiveButton("OK", (d,w) -> done("Routine saved")).show(); }
+                                .setCancelable(false).setPositiveButton("OK", (d,w) -> saved(firstSave, "Routine saved")).show(); }
                 });
             }
             @Override public void onError(Exception error) {
@@ -638,6 +668,60 @@ public class ProfileSettingsActivity extends AppCompatActivity {
                 });
             });
         });
+    }
+
+    /** First save (from the Get started guide) returns to Home; later saves stay on this tab. */
+    private void saved(boolean firstSave, String message) {
+        if (firstSave) { done(message); return; }
+        if (isFinishing() || isDestroyed()) return;
+        dirty = false;
+        save.setEnabled(true);
+        save.setText("Save changes");
+        saveBar.setVisibility(View.GONE);
+        profileState.setText("Your saved routine · edit any value below.");
+        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    }
+
+    private void markDirty() {
+        if (dirty || saveBar == null) return;
+        dirty = true;
+        saveBar.setVisibility(View.VISIBLE);
+    }
+
+    /** Leaving with unsaved changes asks first (Back and the bottom bar both come here). */
+    @Override public boolean canLeave(Runnable leave) {
+        if (!dirty) return true;
+        new android.app.AlertDialog.Builder(this).setTitle("Discard changes?")
+                .setMessage("Your routine changes are not saved yet.")
+                .setNegativeButton("Keep editing", null)
+                .setNeutralButton("Discard", (d, w) -> { dirty = false; leave.run(); })
+                .setPositiveButton("Save", (d, w) -> save()).show();
+        return false;
+    }
+
+    @SuppressWarnings("deprecation")
+    @Override public void onBackPressed() {
+        if (canLeave(this::finish)) super.onBackPressed();
+    }
+
+    private View moreRow(String glyph, String title, String subtitle, int surface, int accent, Runnable open) {
+        LinearLayout row = new LinearLayout(this);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(8), dp(10), dp(8), dp(10));
+        row.setBackground(new android.graphics.drawable.RippleDrawable(ColorStateList.valueOf(surface), null,
+                Ui.round(Color.WHITE, dp(14))));
+        TextView badge = Ui.badge(this, glyph, surface, accent);
+        LinearLayout.LayoutParams badgeParams = new LinearLayout.LayoutParams(dp(38), dp(38));
+        badgeParams.rightMargin = dp(12);
+        row.addView(badge, badgeParams);
+        LinearLayout titles = new LinearLayout(this);
+        titles.setOrientation(LinearLayout.VERTICAL);
+        titles.addView(text(title, 15, INK, true));
+        titles.addView(text(subtitle, 12, MUTED, false));
+        row.addView(titles, new LinearLayout.LayoutParams(0, -2, 1));
+        row.addView(text("›", 20, MUTED, false));
+        row.setOnClickListener(v -> open.run());
+        return row;
     }
 
     private void done(String message) {
@@ -713,6 +797,8 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         toggle.setTextColor(INK);
         toggle.setMinHeight(dp(48));
         toggle.setChecked(com.tempo.app.reminders.Reminders.enabled(this));
+        toggle.setThumbTintList(new ColorStateList(new int[][]{{android.R.attr.state_checked}, {}}, new int[]{GREEN, Color.LTGRAY}));
+        toggle.setTrackTintList(new ColorStateList(new int[][]{{android.R.attr.state_checked}, {}}, new int[]{MINT, Ui.LINE}));
         toggle.setOnCheckedChangeListener((b, on) -> {
             com.tempo.app.reminders.Reminders.setEnabled(this, on);
             if (on && android.os.Build.VERSION.SDK_INT >= 33 && !com.tempo.app.reminders.Reminders.canNotify(this)) {
@@ -756,9 +842,9 @@ public class ProfileSettingsActivity extends AppCompatActivity {
         if (reminderCard != null) renderReminders();
     }
 
-    private void section(String title) {
+    private void section(String title, int color) {
         space(body, 22);
-        body.addView(eyebrow(title));
+        body.addView(Ui.sectionLabel(this, title, color));
         space(body, 8);
     }
 
